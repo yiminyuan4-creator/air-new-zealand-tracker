@@ -1,22 +1,18 @@
-name: Flight Scraper & AI Analysis Workflow
+name: Flight Scraper & Price Analysis Workflow
 
 on:
   workflow_dispatch:
     inputs:
-      flight_number:
-        description: '✈️ Flight Number (e.g., NZ289)'
-        required: true
-        default: 'NZ289'
       departure_date:
-        description: '📅 Departure Date (YYYY-MM-DD)'
+        description: 'Target departure date (Format: YYYY-MM-DD)'
         required: true
         default: '2026-06-15'
       dep_code:
-        description: '🛫 Departure Airport Code'
+        description: 'Origin airport IATA code (e.g., AKL)'
         required: true
         default: 'AKL'
       arr_code:
-        description: '🛬 Arrival Airport Code'
+        description: 'Destination airport IATA code (e.g., PVG)'
         required: true
         default: 'PVG'
   schedule:
@@ -29,7 +25,7 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Set up Python Environment
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
@@ -44,7 +40,7 @@ jobs:
             pip install -r requirements.txt
           fi
 
-      - name: Run Flight Scraper
+      - name: Execute Flight Scraper
         run: |
           if [ -f project/main.py ]; then
             python project/main.py
@@ -52,34 +48,30 @@ jobs:
             python main.py
           fi
 
-      - name: Run Price Analysis
+      - name: Execute Price Analysis Engine
         env:
-          INPUT_FLIGHT: ${{ github.event.inputs.flight_number }}
           INPUT_DATE: ${{ github.event.inputs.departure_date }}
           INPUT_DEP: ${{ github.event.inputs.dep_code }}
           INPUT_ARR: ${{ github.event.inputs.arr_code }}
         run: |
-          # Detect logic path and pass runtime parameters seamlessly
           TARGET_SCRIPT="analysis.py"
           if [ -f "project/analysis.py" ]; then
             TARGET_SCRIPT="project/analysis.py"
           fi
           
           python $TARGET_SCRIPT \
-            --flight "${INPUT_FLIGHT:-NZ289}" \
             --date "${INPUT_DATE:-2026-06-15}" \
             --dep "${INPUT_DEP:-AKL}" \
             --arr "${INPUT_ARR:-PVG}"
 
-      - name: Commit and Push Changes Automatically
+      - name: Commit and Push Changes
         run: |
           git config --local user.email "actions@github.com"
-          git config --local user.name "GitHub Action"
+          git config --local user.name "GitHub Action Bot"
           
-          # Stage tracking assets safely, excluding documentation templates
           git add *.db project/*.db 2>/dev/null || true
           git add *.png project/*.png 2>/dev/null || true
           git add *.txt project/*.txt 2>/dev/null || true
           
-          git commit -m "🤖 Data & Analysis Infrastructure Auto-Update [skip ci]" -a || true
+          git commit -m "build: auto-update flight database and statistical analytics [skip ci]" -a || true
           git push
