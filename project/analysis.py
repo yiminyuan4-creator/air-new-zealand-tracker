@@ -38,10 +38,6 @@ class FlightAnalyzer:
         return ''.join(c if c.isalnum() or c in ('-', '_') else '_' for c in name)
 
     def plot_smart_trends(self, dep_code: str, arr_code: str, dep_date: str) -> str:
-        """
-        Dynamically filters database records for any flights matching the route
-        and departure date, creating distinct visualization lines.
-        """
         sql = '''
             SELECT flight_number, scraped_at, price
             FROM flights
