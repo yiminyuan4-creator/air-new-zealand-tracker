@@ -20,11 +20,18 @@ logger = logging.getLogger(__name__)
 DATABASE = 'flights.db'
 
 
+import os
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+
 class FlightAnalyzer:
-    """Analyzes flight price data from SQLite database"""
+    """Analyzes flight price data from SQLite database and generates plots"""
     
     def __init__(self, db_path: str = DATABASE):
         self.db_path = db_path
+        self.plots_dir = os.path.join(os.getcwd(), 'analysis_plots')
+        os.makedirs(self.plots_dir, exist_ok=True)
     
     def _query_db(self, sql: str, params: Tuple = ()) -> List[Tuple]:
         """Execute query and return results"""
@@ -38,6 +45,109 @@ class FlightAnalyzer:
         except Exception as e:
             logger.error(f"Database query error: {e}")
             return []
+
+    def _sanitize_filename(self, name: str) -> str:
+        """Return a filesystem-safe filename"""
+        return ''.join(c if c.isalnum() or c in ('-', '_') else '_' for c in name)
+
+    def plot_price_history(self, flight_number: str, departure_date: str) -> str:
+        """
+        Generate a line chart for price history of a specific flight.
+        Returns the path to the saved PNG or empty string if not created.
+        """
+        sql = '''
+            SELECT scraped_at, price
+            FROM flights
+            WHERE flight_number = ? AND departure_date = ?
+            ORDER BY scraped_at ASC
+        '''
+        rows = self._query_db(sql, (flight_number, departure_date))
+        if not rows or len(rows) < 2:
+            return ''
+
+        scraped_dates = []
+        prices = []
+        for scraped_at, price in rows:
+            try:
+                scraped_dates.append(datetime.fromisoformat(scraped_at))
+            except Exception:
+                continue
+            prices.append(price)
+
+        if len(scraped_dates) < 2:
+            return ''
+
+        # Calculate days before departure for x-axis
+        try:
+            dep_date = datetime.fromisoformat(departure_date).date()
+            days_before = [(dep_date - d.date()).days for d in scraped_dates]
+        except Exception:
+            days_before = list(range(len(scraped_dates)))
+
+        # Sort by days_before
+        points = sorted(zip(days_before, prices))
+        x, y = zip(*points)
+
+        plt.figure(figsize=(8,4))
+        plt.plot(x, y, marker='o', linestyle='-')
+        plt.gca().invert_xaxis()
+        plt.xlabel('Days before departure')
+        plt.ylabel('Price (NZD)')
+        plt.title(f'Price history for {flight_number} on {departure_date}')
+        plt.grid(True)
+
+        filename = f"{self._sanitize_filename(f'{flight_number}_{departure_date}')}.png"
+        path = os.path.join(self.plots_dir, filename)
+        plt.tight_layout()
+        plt.savefig(path)
+        plt.close()
+        logger.info(f"Saved plot: {path}")
+        return path
+
+    def plot_route_date_comparison(self, departure_code: str, arrival_code: str, scraped_at_date: str) -> str:
+        """
+        Generate a comparison line chart for min/avg prices across departure dates
+        at a specific scrape time. Returns the filepath or empty string.
+        """
+        sql = '''
+            SELECT departure_date, price
+            FROM flights
+            WHERE departure_code = ? AND arrival_code = ? AND DATE(scraped_at) = ?
+            ORDER BY departure_date ASC
+        '''
+        rows = self._query_db(sql, (departure_code, arrival_code, scraped_at_date))
+        if not rows:
+            return ''
+
+        from collections import defaultdict
+        by_date = defaultdict(list)
+        for dep_date, price in rows:
+            by_date[dep_date].append(price)
+
+        dates = sorted(by_date.keys())
+        min_prices = [min(by_date[d]) for d in dates]
+        avg_prices = [round(sum(by_date[d]) / len(by_date[d]), 2) for d in dates]
+
+        if not dates:
+            return ''
+
+        plt.figure(figsize=(10,4))
+        plt.plot(dates, min_prices, marker='o', label='Min Price')
+        plt.plot(dates, avg_prices, marker='x', label='Avg Price')
+        plt.xticks(rotation=45)
+        plt.xlabel('Departure date')
+        plt.ylabel('Price (NZD)')
+        plt.title(f'Route {departure_code}→{arrival_code} prices on {scraped_at_date}')
+        plt.legend()
+        plt.grid(True)
+
+        filename = f"{self._sanitize_filename(f'{departure_code}_{arrival_code}_{scraped_at_date}')}.png"
+        path = os.path.join(self.plots_dir, filename)
+        plt.tight_layout()
+        plt.savefig(path)
+        plt.close()
+        logger.info(f"Saved plot: {path}")
+        return path
     
     def analyze_price_history(self, flight_number: str, departure_date: str) -> Dict:
         """
@@ -178,7 +288,7 @@ class FlightAnalyzer:
     def generate_report_dimension_a(self) -> str:
         """
         Generate comprehensive report for Analysis Dimension A
-        (Price history for specific flights)
+        (Price history for specific flights) and produce plots
         """
         # Get unique flight-date combinations
         sql = '''
@@ -210,6 +320,11 @@ class FlightAnalyzer:
             report += f"  Price Range: {analysis['price_range']} NZD\n"
             report += f"  Best Booking Date: {analysis['best_booking_date']}\n"
             report += f"  Total Observations: {analysis['total_observations']}\n"
+            
+            # Generate plot for this flight-date
+            plot_path = self.plot_price_history(flight_num, dep_date)
+            if plot_path:
+                report += f"  Plot: {plot_path}\n"
             report += "\n"
         
         return report
@@ -217,7 +332,7 @@ class FlightAnalyzer:
     def generate_report_dimension_b(self) -> str:
         """
         Generate comprehensive report for Analysis Dimension B
-        (Route comparison across different departure dates)
+        (Route comparison across different departure dates) and produce plots
         """
         # Get unique routes from most recent scrape
         sql = '''
@@ -247,7 +362,12 @@ class FlightAnalyzer:
             report += f"  Cheapest Price: {analysis['cheapest_date_min_price']} NZD\n"
             report += f"  Best Value Date: {analysis['best_value_date']['departure_date']} "
             report += f"(avg: {analysis['best_value_date']['avg_price']} NZD)\n"
-            report += f"  Total Dates Analyzed: {len(analysis['date_comparison'])}\n\n"
+            report += f"  Total Dates Analyzed: {len(analysis['date_comparison'])}\n"
+            # Generate plot for this route at the most recent scrape
+            plot_path = self.plot_route_date_comparison(dep_code, arr_code, most_recent_scrape)
+            if plot_path:
+                report += f"  Plot: {plot_path}\n"
+            report += "\n"
         
         return report
     
