@@ -3,7 +3,6 @@ name: Flight Tracker Suite
 on:
   schedule:
     - cron: '0 2 * * *'
-  
   workflow_dispatch:
     inputs:
       departure_date:
@@ -40,9 +39,7 @@ jobs:
       - name: Run Full-Scale Data Scraper
         if: github.event_name == 'schedule' || github.event.inputs.departure_date == ''
         run: |
-          TARGET_MAIN="main.py"
-          if [ -f "project/main.py" ]; then TARGET_MAIN="project/main.py"; fi
-          python $TARGET_MAIN
+          python main.py
 
       - name: Run Analytics Engine From Database
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.departure_date != ''
@@ -51,18 +48,16 @@ jobs:
           INPUT_DEP: ${{ github.event.inputs.dep_code }}
           INPUT_ARR: ${{ github.event.inputs.arr_code }}
         run: |
-          TARGET_SCRIPT="analysis.py"
-          if [ -f "project/analysis.py" ]; then TARGET_SCRIPT="project/analysis.py"; fi
-          python $TARGET_SCRIPT --date "$INPUT_DATE" --dep "$INPUT_DEP" --arr "$INPUT_ARR"
+          python analysis.py --date "$INPUT_DATE" --dep "$INPUT_DEP" --arr "$INPUT_ARR"
 
       - name: Save Infrastructure and Visual Assets
         run: |
           git config --local user.email "actions@github.com"
           git config --local user.name "GitHub Action Bot"
           
-          git add *.db project/*.db 2>/dev/null || true
-          git add *.png project/*.png 2>/dev/null || true
-          git add *.txt project/*.txt 2>/dev/null || true
+          git add *.db 2>/dev/null || true
+          git add *.png 2>/dev/null || true
+          git add *.txt 2>/dev/null || true
           
           git commit -m "build: infrastructure state preservation [skip ci]" -a || true
           git push
