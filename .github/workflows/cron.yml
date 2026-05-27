@@ -1,6 +1,9 @@
-name: Flight Scraper & Price Analysis Workflow
+name: Flight Tracker Suite
 
 on:
+  schedule:
+    - cron: '0 2 * * *'
+  
   workflow_dispatch:
     inputs:
       departure_date:
@@ -15,11 +18,9 @@ on:
         description: 'Destination airport IATA code (e.g., PVG)'
         required: true
         default: 'PVG'
-  schedule:
-    - cron: '0 2 * * *'
 
 jobs:
-  run-pipeline:
+  execute-pipeline:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
@@ -31,40 +32,30 @@ jobs:
           python-version: '3.10'
           cache: 'pip'
 
-      - name: Install Dependencies
+      - name: Install System Dependencies
         run: |
           python -m pip install --upgrade pip
-          if [ -f project/requirements.txt ]; then
-            pip install -r project/requirements.txt
-          else
-            pip install -r requirements.txt
-          fi
+          pip install numpy==1.26.4 matplotlib==3.8.4 requests==2.31.0 beautifulsoup4==4.12.3
 
-      - name: Execute Flight Scraper
+      - name: Run Full-Scale Data Scraper
+        if: github.event_name == 'schedule' || github.event.inputs.departure_date == ''
         run: |
-          if [ -f project/main.py ]; then
-            python project/main.py
-          else
-            python main.py
-          fi
+          TARGET_MAIN="main.py"
+          if [ -f "project/main.py" ]; then TARGET_MAIN="project/main.py"; fi
+          python $TARGET_MAIN
 
-      - name: Execute Price Analysis Engine
+      - name: Run Analytics Engine From Database
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.departure_date != ''
         env:
           INPUT_DATE: ${{ github.event.inputs.departure_date }}
           INPUT_DEP: ${{ github.event.inputs.dep_code }}
           INPUT_ARR: ${{ github.event.inputs.arr_code }}
         run: |
           TARGET_SCRIPT="analysis.py"
-          if [ -f "project/analysis.py" ]; then
-            TARGET_SCRIPT="project/analysis.py"
-          fi
-          
-          python $TARGET_SCRIPT \
-            --date "${INPUT_DATE:-2026-06-15}" \
-            --dep "${INPUT_DEP:-AKL}" \
-            --arr "${INPUT_ARR:-PVG}"
+          if [ -f "project/analysis.py" ]; then TARGET_SCRIPT="project/analysis.py"; fi
+          python $TARGET_SCRIPT --date "$INPUT_DATE" --dep "$INPUT_DEP" --arr "$INPUT_ARR"
 
-      - name: Commit and Push Changes
+      - name: Save Infrastructure and Visual Assets
         run: |
           git config --local user.email "actions@github.com"
           git config --local user.name "GitHub Action Bot"
@@ -73,5 +64,5 @@ jobs:
           git add *.png project/*.png 2>/dev/null || true
           git add *.txt project/*.txt 2>/dev/null || true
           
-          git commit -m "build: auto-update flight database and statistical analytics [skip ci]" -a || true
+          git commit -m "build: infrastructure state preservation [skip ci]" -a || true
           git push
