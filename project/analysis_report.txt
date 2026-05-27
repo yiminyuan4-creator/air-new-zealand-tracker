@@ -2,20 +2,28 @@
 DATABASE SUMMARY STATISTICS
 ================================================================================
 
-Total Flights in Database: 21100
+Total Flights in Database: 42245
 Routes Covered: 20
 Departure Date Range: 2026-05-27 to 2027-05-26
 Scrape Sessions: 1
 
 Price Statistics:
   Minimum: $150.03 NZD
-  Maximum: $999.97 NZD
-  Average: $682.95 NZD
+  Maximum: $1000.00 NZD
+  Average: $682.87 NZD
 
 ================================================================================
 ANALYSIS DIMENSION A: FLIGHT PRICE HISTORY
 When to book for cheapest price (days in advance)
 ================================================================================
+
+Flight: NZ289 on 2026-06-15
+  Min Price: 278.03 NZD
+  Max Price: 278.03 NZD
+  Price Range: 0.0 NZD
+  Best Booking Date: 2026-05-27T22:56:59.463854
+  Total Observations: 1
+  Plot: /home/runner/work/air-new-zealand-tracker/air-new-zealand-tracker/project/NZ289_2026-06-15.png
 
 
 ================================================================================
