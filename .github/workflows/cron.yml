@@ -1,69 +1,48 @@
-name: Daily Flight Price Scraper
+name: Flight Scraper & AI Analysis Workflow
 
 on:
   schedule:
-    # Run every day at 02:00 UTC (10:00 NZST)
     - cron: '0 2 * * *'
-  
-  # Allow manual trigger
   workflow_dispatch:
 
 jobs:
-  scrape-flights:
+  run-pipeline:
     runs-on: ubuntu-latest
     
-    strategy:
-      matrix:
-        python-version: ['3.11']
-    
+    permissions:
+      contents: write
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-      
+
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: '3.11'
           cache: 'pip'
-      
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-      
+          if [ -f project/requirements.txt ]; then pip install -r project/requirements.txt; fi
+
       - name: Run flight scraper
+        working-directory: ./project
         run: |
           python main.py
-      
-      - name: Run analysis
+
+      - name: Run AI Analysis & Generate Charts
+        working-directory: ./project
         run: |
-          python analysis.py > analysis_report.txt
-      
-      - name: Commit and push changes
+          python analysis.py
+
+      - name: Commit and push changes automatically
         run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          
-          # Check if there are changes to commit
-          if [[ -n $(git status -s) ]]; then
-            echo "Changes detected, committing..."
-            git add flights.db analysis_report.txt
-            git commit -m "chore: update flight prices and analysis report - $(date +'%Y-%m-%d %H:%M:%S UTC')"
-            git push
-            echo "Changes pushed successfully"
-          else
-            echo "No changes to commit"
-          fi
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      
-      - name: Upload artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: flight-data-${{ github.run_id }}
-          path: |
-            flights.db
-            analysis_report.txt
-            analysis_plots/**
-          retention-days: 30
+          git config --local user.email "actions@github.com"
+          git config --local user.name "GitHub Action AI"
+          git add project/flights.db || true
+          git add project/*.png || true
+          git add project/*.txt || true
+          git commit -m "🤖 AI Auto-Update: Data, Trend Charts and Reports [skip ci]" -a || true
+          git push
