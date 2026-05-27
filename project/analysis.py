@@ -17,11 +17,6 @@ logger = logging.getLogger(__name__)
 
 DATABASE = 'flights.db'
 
-# Smart fallback fallback targets
-FILTER_DEPARTURE_DATE = "2026-06-15"
-FILTER_DEPARTURE_CODE = "AKL"
-FILTER_ARRIVAL_CODE = "PVG"
-
 class FlightAnalyzer:
     def __init__(self, db_path: str = DATABASE):
         self.db_path = db_path
@@ -44,10 +39,9 @@ class FlightAnalyzer:
 
     def plot_smart_trends(self, dep_code: str, arr_code: str, dep_date: str) -> str:
         """
-        Smart Plotting: Automatically discovers all available flights on the route 
-        and date, plotting them as distinct trend lines or standalone initial price points.
+        Dynamically filters database records for any flights matching the route
+        and departure date, creating distinct visualization lines.
         """
-        # Fetch data points grouped by flight number dynamically
         sql = '''
             SELECT flight_number, scraped_at, price
             FROM flights
@@ -56,10 +50,9 @@ class FlightAnalyzer:
         '''
         rows = self._query_db(sql, (dep_code, arr_code, dep_date))
         if not rows:
-            logger.warning(f"No flight records found for {dep_code}->{arr_code} on {dep_date}")
+            logger.warning(f"No records discovered for {dep_code}->{arr_code} on {dep_date}")
             return ''
 
-        # Group observations by flight numbers found in database
         flight_data = {}
         for flight_num, scraped_at, price in rows:
             if flight_num not in flight_data:
@@ -73,7 +66,6 @@ class FlightAnalyzer:
         plt.figure(figsize=(9, 5))
         has_plots = False
 
-        # Dynamically draw lines/points for each flight discovered
         for flight_num, data in flight_data.items():
             scraped_dates = data['dates']
             prices = data['prices']
@@ -111,7 +103,7 @@ class FlightAnalyzer:
         plt.tight_layout()
         plt.savefig(path)
         plt.close()
-        logger.info(f"Successfully generated smart visual graph at: {path}")
+        logger.info(f"Generated smart visualization at: {path}")
         return path
 
     def generate_summary_stats(self) -> str:
@@ -138,16 +130,11 @@ def main():
         parser.add_argument("--arr", type=str, default="PVG", help="Arrival airport code")
         args = parser.parse_args()
 
-        global FILTER_DEPARTURE_DATE, FILTER_DEPARTURE_CODE, FILTER_ARRIVAL_CODE
-        FILTER_DEPARTURE_DATE = args.date
-        FILTER_DEPARTURE_CODE = args.dep
-        FILTER_ARRIVAL_CODE = args.arr
-
         analyzer = FlightAnalyzer(DATABASE)
         summary = analyzer.generate_summary_stats()
         
-        report_meta = f"\nTarget Sector Selection: {FILTER_DEPARTURE_CODE} -> {FILTER_ARRIVAL_CODE} on {FILTER_DEPARTURE_DATE}\n"
-        analyzer.plot_smart_trends(FILTER_DEPARTURE_CODE, FILTER_ARRIVAL_CODE, FILTER_DEPARTURE_DATE)
+        report_meta = f"\nTarget Sector Selection: {args.dep} -> {args.arr} on {args.date}\n"
+        analyzer.plot_smart_trends(args.dep, args.arr, args.date)
         
         with open("analysis_report.txt", "w", encoding="utf-8") as f:
             f.write(summary + report_meta)
