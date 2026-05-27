@@ -1,0 +1,26 @@
+================================================================================
+DATABASE SUMMARY STATISTICS
+================================================================================
+
+Total Flights in Database: 21100
+Routes Covered: 20
+Departure Date Range: 2026-05-27 to 2027-05-26
+Scrape Sessions: 1
+
+Price Statistics:
+  Minimum: $150.03 NZD
+  Maximum: $999.97 NZD
+  Average: $682.95 NZD
+
+================================================================================
+ANALYSIS DIMENSION A: FLIGHT PRICE HISTORY
+When to book for cheapest price (days in advance)
+================================================================================
+
+
+================================================================================
+ANALYSIS DIMENSION B: ROUTE DATE COMPARISON
+Which departure date has cheapest prices on same route
+Analysis Date: 2026-05-27
+================================================================================
+
