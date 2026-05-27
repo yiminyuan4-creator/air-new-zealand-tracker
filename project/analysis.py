@@ -133,6 +133,7 @@ def main():
         analyzer = FlightAnalyzer(DATABASE)
         summary = analyzer.generate_summary_stats()
         
+        # 🔗 核心修复点：把传递进来的动态变量 args.dep, args.arr, args.date 毫无保留地喂给画图函数
         report_meta = f"\nTarget Sector Selection: {args.dep} -> {args.arr} on {args.date}\n"
         analyzer.plot_smart_trends(args.dep, args.arr, args.date)
         
