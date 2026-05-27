@@ -2,38 +2,68 @@ name: Daily Flight Price Scraper
 
 on:
   schedule:
-    - cron: '0 2 * * *'  
-  workflow_dispatch:     
+    # Run every day at 02:00 UTC (10:00 NZST)
+    - cron: '0 2 * * *'
+  
+  # Allow manual trigger
+  workflow_dispatch:
 
 jobs:
   scrape-flights:
     runs-on: ubuntu-latest
-
+    
+    strategy:
+      matrix:
+        python-version: ['3.11']
+    
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
+      
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.11'
+          python-version: ${{ matrix.python-version }}
           cache: 'pip'
-
+      
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          if [ -f project/requirements.txt ]; then pip install -r project/requirements.txt; fi
-
+          pip install -r requirements.txt
+      
       - name: Run flight scraper
-        working-directory: ./project
         run: |
           python main.py
-
-      - name: Upload Artifact
+      
+      - name: Run analysis
+        run: |
+          python analysis.py > analysis_report.txt
+      
+      - name: Commit and push changes
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          
+          # Check if there are changes to commit
+          if [[ -n $(git status -s) ]]; then
+            echo "Changes detected, committing..."
+            git add flights.db analysis_report.txt
+            git commit -m "chore: update flight prices and analysis report - $(date +'%Y-%m-%d %H:%M:%S UTC')"
+            git push
+            echo "Changes pushed successfully"
+          else
+            echo "No changes to commit"
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Upload artifacts
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: flight-data
+          name: flight-data-${{ github.run_id }}
           path: |
-            project/flights.db
-            project/analysis_report.txt
-          if-no-files-found: warn
+            flights.db
+            analysis_report.txt
+            analysis_plots/**
+          retention-days: 30
