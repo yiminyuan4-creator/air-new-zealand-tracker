@@ -29,8 +29,7 @@ FILTER_ARRIVAL_CODE = "PVG"
 class FlightAnalyzer:
     def __init__(self, db_path: str = DATABASE):
         self.db_path = db_path
-        self.plots_dir = os.path.join(os.getcwd(), 'analysis_plots')
-        os.makedirs(self.plots_dir, exist_ok=True)
+        self.plots_dir = os.getcwd()
     
     def _query_db(self, sql: str, params: Tuple = ()) -> List[Tuple]:
         try:
