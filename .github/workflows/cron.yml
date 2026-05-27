@@ -1,50 +1,85 @@
 name: Flight Scraper & AI Analysis Workflow
 
 on:
+  workflow_dispatch:
+    inputs:
+      flight_number:
+        description: '✈️ Flight Number (e.g., NZ289)'
+        required: true
+        default: 'NZ289'
+      departure_date:
+        description: '📅 Departure Date (YYYY-MM-DD)'
+        required: true
+        default: '2026-06-15'
+      dep_code:
+        description: '🛫 Departure Airport Code'
+        required: true
+        default: 'AKL'
+      arr_code:
+        description: '🛬 Arrival Airport Code'
+        required: true
+        default: 'PVG'
   schedule:
     - cron: '0 2 * * *'
-  workflow_dispatch:
 
 jobs:
   run-pipeline:
     runs-on: ubuntu-latest
-    
-    permissions:
-      contents: write
-
     steps:
-      - name: Checkout repository
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.10'
           cache: 'pip'
 
-      - name: Install dependencies
+      - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          if [ -f project/requirements.txt ]; then pip install -r project/requirements.txt; fi
+          if [ -f project/requirements.txt ]; then
+            pip install -r project/requirements.txt
+          else
+            pip install -r requirements.txt
+          fi
+
+      - name: Run Flight Scraper
+        run: |
+          if [ -f project/main.py ]; then
+            python project/main.py
+          else
+            python main.py
+          fi
+
+      - name: Run Price Analysis
+        env:
+          INPUT_FLIGHT: ${{ github.event.inputs.flight_number }}
+          INPUT_DATE: ${{ github.event.inputs.departure_date }}
+          INPUT_DEP: ${{ github.event.inputs.dep_code }}
+          INPUT_ARR: ${{ github.event.inputs.arr_code }}
+        run: |
+          # Detect logic path and pass runtime parameters seamlessly
+          TARGET_SCRIPT="analysis.py"
+          if [ -f "project/analysis.py" ]; then
+            TARGET_SCRIPT="project/analysis.py"
+          fi
           
-          pip install --upgrade numpy matplotlib
+          python $TARGET_SCRIPT \
+            --flight "${INPUT_FLIGHT:-NZ289}" \
+            --date "${INPUT_DATE:-2026-06-15}" \
+            --dep "${INPUT_DEP:-AKL}" \
+            --arr "${INPUT_ARR:-PVG}"
 
-      - name: Run flight scraper
-        working-directory: ./project
-        run: |
-          python main.py
-
-      - name: Run AI Analysis & Generate Charts
-        working-directory: ./project
-        run: |
-          python analysis.py
-
-      - name: Commit and push changes automatically
+      - name: Commit and Push Changes Automatically
         run: |
           git config --local user.email "actions@github.com"
-          git config --local user.name "GitHub Action AI"
-          git add project/flights.db || true
-          git add project/*.png || true
-          git add project/*.txt || true
-          git commit -m "🤖 AI Auto-Update: Data, Trend Charts and Reports [skip ci]" -a || true
+          git config --local user.name "GitHub Action"
+          
+          # Stage tracking assets safely, excluding documentation templates
+          git add *.db project/*.db 2>/dev/null || true
+          git add *.png project/*.png 2>/dev/null || true
+          git add *.txt project/*.txt 2>/dev/null || true
+          
+          git commit -m "🤖 Data & Analysis Infrastructure Auto-Update [skip ci]" -a || true
           git push
