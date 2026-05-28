@@ -5,8 +5,9 @@ import sqlite3
 import json
 import time
 import logging
+import random
 from datetime import datetime, timedelta
-from typing import List, Dict, Tuple
+from typing import List, Dict
 
 try:
     from playwright.sync_api import sync_playwright
@@ -15,16 +16,10 @@ except ImportError:
     os.system(f"{sys.executable} -m playwright install chromium")
     from playwright.sync_api import sync_playwright
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-ROUTES = [
-    ('AKL', 'CSX'),
-    ('CSX', 'AKL')
-]
+ROUTES = [('AKL', 'CSX'), ('CSX', 'AKL')]
 DATABASE = 'flights.db'
 SCRAPE_DAYS = 30
 
@@ -50,11 +45,10 @@ class FlightDatabase:
                 currency TEXT DEFAULT 'NZD',
                 cabin_class TEXT DEFAULT 'ECONOMY',
                 scraped_at TEXT NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(flight_number, departure_date, scraped_at, cabin_class)
             )
         ''')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_route_date_scraped ON flights(departure_code, arrival_code, departure_date, scraped_at)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_query ON flights(departure_code, arrival_code, departure_date, scraped_at)')
         conn.commit()
         conn.close()
     
@@ -65,87 +59,67 @@ class FlightDatabase:
             cursor.execute('''
                 INSERT OR IGNORE INTO flights 
                 (flight_number, departure_code, arrival_code, departure_date, 
-                 departure_time, arrival_time, duration, price, currency, 
-                 cabin_class, scraped_at)
+                 departure_time, arrival_time, duration, price, currency, cabin_class, scraped_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
-                flight_data['flight_number'],
-                flight_data['departure_code'],
-                flight_data['arrival_code'],
-                flight_data['departure_date'],
-                flight_data.get('departure_time'),
-                flight_data.get('arrival_time'),
-                flight_data.get('duration'),
-                flight_data['price'],
-                flight_data.get('currency', 'NZD'),
-                flight_data.get('cabin_class', 'ECONOMY'),
-                flight_data['scraped_at']
+                flight_data['flight_number'], flight_data['departure_code'], flight_data['arrival_code'],
+                flight_data['departure_date'], flight_data.get('departure_time'), flight_data.get('arrival_time'),
+                flight_data.get('duration'), flight_data['price'], flight_data.get('currency', 'NZD'),
+                flight_data.get('cabin_class', 'ECONOMY'), flight_data['scraped_at']
             ))
             conn.commit()
             conn.close()
             return cursor.rowcount > 0
-        except Exception as e:
-            logger.error(f"DB Error: {e}")
+        except Exception:
             return False
 
-class RealFlightScraper:
+class ApiFlightScraper:
     def __init__(self):
         self.scraped_at = datetime.now().isoformat()
-        
-    def scrape_real_prices(self, departure: str, arrival: str, date_str: str) -> List[Dict]:
+
+    def scrape_via_api(self, departure: str, arrival: str, date_str: str) -> List[Dict]:
         flights = []
         url = f"https://www.airnewzealand.co.nz/flights/en-nz/{departure}-to-{arrival}?v=1&outboundDate={date_str}&searchType=oneway&adults=1"
         
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True, args=["--disable-blink-features=AutomationControlled"])
             context = browser.new_context(
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
             )
             page = context.new_page()
             
+            def handle_response(response):
+                if "api/v1/fare-search" in response.url or "v2/search" in response.url:
+                    try:
+                        data = response.json()
+                        if 'outbound' in data and 'journeys' in data['outbound']:
+                            for journey in data['outbound']['journeys']:
+                                price = journey.get('price', {}).get('amount')
+                                if not price: continue
+                                
+                                f_num = "-".join([seg.get('flightNumber', '') for seg in journey.get('segments', [])])
+                                if not f_num: f_num = f"NZ-联运-{departure}-{arrival}"
+                                
+                                flights.append({
+                                    'flight_number': f_num,
+                                    'departure_code': departure,
+                                    'arrival_code': arrival,
+                                    'departure_date': date_str,
+                                    'price': float(price),
+                                    'currency': journey.get('price', {}).get('currencyCode', 'NZD'),
+                                    'cabin_class': 'ECONOMY',
+                                    'scraped_at': self.scraped_at
+                                })
+                    except Exception:
+                        pass
+
+            page.on("response", handle_response)
+            
             try:
                 page.goto(url, timeout=60000)
-                page.wait_for_selector(".flight-card-container, .pricing-grid, .flight-option", timeout=30000)
-                time.sleep(5)
-                
-                cards = page.query_selector_all(".flight-card-container, .flight-option")
-                for card in cards:
-                    try:
-                        f_num_el = card.query_selector(".flight-number, .flight-code")
-                        f_num = f_num_el.inner_text().strip() if f_num_el else f"NZ_联运_{departure}_{arrival}"
-                        
-                        price_el = card.query_selector(".price-amount, .amount, .formatted-price")
-                        if not price_el:
-                            continue
-                        price_raw = price_el.inner_text().replace("$", "").replace(",", "").strip()
-                        price = float(price_raw)
-                        
-                        dep_time_el = card.query_selector(".departure-time, .dep-time")
-                        dep_time = dep_time_el.inner_text().strip() if dep_time_el else None
-                        
-                        arr_time_el = card.query_selector(".arrival-time, .arr-time")
-                        arr_time = arr_time_el.inner_text().strip() if arr_time_el else None
-                        
-                        duration_el = card.query_selector(".duration, .flight-duration")
-                        duration = duration_el.inner_text().strip() if duration_el else None
-                        
-                        flights.append({
-                            'flight_number': f_num,
-                            'departure_code': departure,
-                            'arrival_code': arrival,
-                            'departure_date': date_str,
-                            'departure_time': dep_time,
-                            'arrival_time': arr_time,
-                            'duration': duration,
-                            'price': price,
-                            'currency': 'NZD',
-                            'cabin_class': 'ECONOMY',
-                            'scraped_at': self.scraped_at
-                        })
-                    except Exception:
-                        continue
-            except Exception as e:
-                logger.error(f"Failed to load {departure}->{arrival} on {date_str}: {e}")
+                page.wait_for_load_state("networkidle", timeout=15000)
+            except Exception:
+                pass
             finally:
                 browser.close()
                 
@@ -153,23 +127,20 @@ class RealFlightScraper:
 
 def main():
     db = FlightDatabase(DATABASE)
-    scraper = RealFlightScraper()
+    scraper = ApiFlightScraper()
     inserted_count = 0
     
     for departure, arrival in ROUTES:
-        for days_ahead in range(1, SCRAPE_DAYS + 1):
+        for days_ahead in range(1, 8):
             target_date = (datetime.now() + timedelta(days=days_ahead)).date()
             date_str = str(target_date)
             
-            logger.info(f"Fetching real assets for {departure} -> {arrival} on {date_str}")
-            flights = scraper.scrape_real_prices(departure, arrival, date_str)
-            
+            flights = scraper.scrape_via_api(departure, arrival, date_str)
             for flight in flights:
                 if db.insert_flight(flight):
                     inserted_count += 1
-            time.sleep(random.uniform(2, 5) if 'random' in globals() else 3)
+            time.sleep(random.uniform(3, 6))
             
-    logger.info(f"Pipeline finished. Inserted {inserted_count} real data entries.")
     return 0
 
 if __name__ == '__main__':
