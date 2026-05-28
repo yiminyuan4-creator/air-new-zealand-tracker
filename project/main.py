@@ -1,23 +1,11 @@
 #!/usr/bin/env python3
 import os
-import sys
 import sqlite3
-import json
 import time
-import logging
 import random
+import requests
 from datetime import datetime, timedelta
 from typing import List, Dict
-
-try:
-    from playwright.sync_api import sync_playwright
-except ImportError:
-    os.system(f"{sys.executable} -m pip install playwright")
-    os.system(f"{sys.executable} -m playwright install chromium")
-    from playwright.sync_api import sync_playwright
-
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
 
 ROUTES = [('AKL', 'CSX'), ('CSX', 'AKL')]
 DATABASE = 'flights.db'
@@ -73,73 +61,78 @@ class FlightDatabase:
         except Exception:
             return False
 
-class ApiFlightScraper:
+class AirNewZealandApiClient:
     def __init__(self):
         self.scraped_at = datetime.now().isoformat()
+        self.headers = {
+            'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Mobile/15E148 Safari/604.1',
+            'Accept': 'application/json, text/plain, */*',
+            'Accept-Language': 'en-NZ,en;q=0.9',
+            'Origin': 'https://www.airnewzealand.co.nz',
+            'Referer': 'https://www.airnewzealand.co.nz/'
+        }
 
-    def scrape_via_api(self, departure: str, arrival: str, date_str: str) -> List[Dict]:
+    def fetch_prices(self, departure: str, arrival: str, date_str: str) -> List[Dict]:
         flights = []
-        url = f"https://www.airnewzealand.co.nz/flights/en-nz/{departure}-to-{arrival}?v=1&outboundDate={date_str}&searchType=oneway&adults=1"
+        api_url = "https://www.airnewzealand.co.nz/api/v1/fare-search/search"
         
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True, args=["--disable-blink-features=AutomationControlled"])
-            context = browser.new_context(
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-            )
-            page = context.new_page()
-            
-            def handle_response(response):
-                if "api/v1/fare-search" in response.url or "v2/search" in response.url:
-                    try:
-                        data = response.json()
-                        if 'outbound' in data and 'journeys' in data['outbound']:
-                            for journey in data['outbound']['journeys']:
-                                price = journey.get('price', {}).get('amount')
-                                if not price: continue
-                                
-                                f_num = "-".join([seg.get('flightNumber', '') for seg in journey.get('segments', [])])
-                                if not f_num: f_num = f"NZ-联运-{departure}-{arrival}"
-                                
-                                flights.append({
-                                    'flight_number': f_num,
-                                    'departure_code': departure,
-                                    'arrival_code': arrival,
-                                    'departure_date': date_str,
-                                    'price': float(price),
-                                    'currency': journey.get('price', {}).get('currencyCode', 'NZD'),
-                                    'cabin_class': 'ECONOMY',
-                                    'scraped_at': self.scraped_at
-                                })
-                    except Exception:
-                        pass
-
-            page.on("response", handle_response)
-            
-            try:
-                page.goto(url, timeout=60000)
-                page.wait_for_load_state("networkidle", timeout=15000)
-            except Exception:
-                pass
-            finally:
-                browser.close()
-                
+        payload = {
+            "product": "RETAIL",
+            "searchType": "ONEWAY",
+            "segments": [{
+                "origin": departure,
+                "destination": arrival,
+                "departureDate": date_str
+            }],
+            "passengers": [{"type": "ADULT", "count": 1}],
+            "cabinClass": "ECONOMY",
+            "loyaltyProgram": "AIRPOINTS"
+        }
+        
+        try:
+            response = requests.post(api_url, json=payload, headers=self.headers, timeout=15)
+            if response.status_code == 200:
+                data = response.json()
+                if 'outbound' in data and 'journeys' in data['outbound']:
+                    for journey in data['outbound']['journeys']:
+                        price_struct = journey.get('price', {})
+                        price = price_struct.get('amount')
+                        if price is None:
+                            continue
+                            
+                        segments = journey.get('segments', [])
+                        f_num = "-".join([seg.get('flightNumber', '') for seg in segments if seg.get('flightNumber')])
+                        if not f_num: 
+                            f_num = f"NZ-联运-{departure}-{arrival}"
+                            
+                        flights.append({
+                            'flight_number': f_num,
+                            'departure_code': departure,
+                            'arrival_code': arrival,
+                            'departure_date': date_str,
+                            'price': float(price),
+                            'currency': price_struct.get('currencyCode', 'NZD'),
+                            'cabin_class': 'ECONOMY',
+                            'scraped_at': self.scraped_at
+                        })
+        except Exception:
+            pass
         return flights
 
 def main():
     db = FlightDatabase(DATABASE)
-    scraper = ApiFlightScraper()
-    inserted_count = 0
+    client = AirNewZealandApiClient()
     
     for departure, arrival in ROUTES:
-        for days_ahead in range(1, 8):
+        for days_ahead in range(1, SCRAPE_DAYS + 1):
             target_date = (datetime.now() + timedelta(days=days_ahead)).date()
             date_str = str(target_date)
             
-            flights = scraper.scrape_via_api(departure, arrival, date_str)
+            flights = client.fetch_prices(departure, arrival, date_str)
             for flight in flights:
-                if db.insert_flight(flight):
-                    inserted_count += 1
-            time.sleep(random.uniform(3, 6))
+                db.insert_flight(flight)
+                
+            time.sleep(random.uniform(1.5, 3.5))
             
     return 0
 
