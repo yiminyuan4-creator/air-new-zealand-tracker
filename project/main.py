@@ -1,65 +1,41 @@
 #!/usr/bin/env python3
-"""
-New Zealand Airways Flight Price Scraper
-Automatically scrapes flight prices and stores in SQLite database with timestamps
-"""
-
+import os
+import sys
 import sqlite3
 import json
-import random
-from datetime import datetime, timedelta
-from typing import List, Tuple, Dict
-import requests
-from bs4 import BeautifulSoup
+import time
 import logging
+from datetime import datetime, timedelta
+from typing import List, Dict, Tuple
 
-# Configure logging
+try:
+    from playwright.sync_api import sync_playwright
+except ImportError:
+    os.system(f"{sys.executable} -m pip install playwright")
+    os.system(f"{sys.executable} -m playwright install chromium")
+    from playwright.sync_api import sync_playwright
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
 
-# Flight routes configuration
 ROUTES = [
-    ('AKL', 'WLG'),
-    ('AKL', 'SYD'),
     ('AKL', 'CSX'),
-    ('AKL', 'JFK'),
-    ('WLG', 'AKL'),
-    ('WLG', 'SYD'),
-    ('WLG', 'CSX'),
-    ('WLG', 'JFK'),
-    ('SYD', 'AKL'),
-    ('SYD', 'WLG'),
-    ('SYD', 'CSX'),
-    ('SYD', 'JFK'),
-    ('CSX', 'AKL'),
-    ('CSX', 'WLG'),
-    ('CSX', 'SYD'),
-    ('CSX', 'JFK'),
-    ('JFK', 'AKL'),
-    ('JFK', 'WLG'),
-    ('JFK', 'SYD'),
-    ('JFK', 'CSX'),
+    ('CSX', 'AKL')
 ]
-
 DATABASE = 'flights.db'
-SCRAPE_DAYS = 365  # Scrape 365 days into the future
-
+SCRAPE_DAYS = 30
 
 class FlightDatabase:
-    """Manages SQLite database operations for flight data"""
-    
     def __init__(self, db_path: str = DATABASE):
         self.db_path = db_path
         self.init_database()
     
     def init_database(self):
-        """Initialize database with flights table if it doesn't exist"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
-        
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS flights (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -78,32 +54,14 @@ class FlightDatabase:
                 UNIQUE(flight_number, departure_date, scraped_at, cabin_class)
             )
         ''')
-        
-        cursor.execute('''
-            CREATE INDEX IF NOT EXISTS idx_route_date_scraped 
-            ON flights(departure_code, arrival_code, departure_date, scraped_at)
-        ''')
-        
-        cursor.execute('''
-            CREATE INDEX IF NOT EXISTS idx_departure_date 
-            ON flights(departure_date)
-        ''')
-        
-        cursor.execute('''
-            CREATE INDEX IF NOT EXISTS idx_flight_number 
-            ON flights(flight_number)
-        ''')
-        
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_route_date_scraped ON flights(departure_code, arrival_code, departure_date, scraped_at)')
         conn.commit()
         conn.close()
-        logger.info("Database initialized successfully")
     
     def insert_flight(self, flight_data: Dict) -> bool:
-        """Insert flight data into database, ignoring duplicates"""
         try:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
-            
             cursor.execute('''
                 INSERT OR IGNORE INTO flights 
                 (flight_number, departure_code, arrival_code, departure_date, 
@@ -123,155 +81,96 @@ class FlightDatabase:
                 flight_data.get('cabin_class', 'ECONOMY'),
                 flight_data['scraped_at']
             ))
-            
             conn.commit()
             conn.close()
             return cursor.rowcount > 0
         except Exception as e:
-            logger.error(f"Error inserting flight data: {e}")
+            logger.error(f"DB Error: {e}")
             return False
-    
-    def get_flight_price_history(self, flight_number: str, departure_date: str) -> List[Tuple]:
-        """Get price history for a specific flight and departure date"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            SELECT scraped_at, price, currency, cabin_class
-            FROM flights
-            WHERE flight_number = ? AND departure_date = ?
-            ORDER BY scraped_at ASC
-        ''', (flight_number, departure_date))
-        
-        results = cursor.fetchall()
-        conn.close()
-        return results
-    
-    def get_route_prices_by_date(self, departure_code: str, arrival_code: str, 
-                                 scraped_at_date: str) -> List[Tuple]:
-        """Get all flights for a route with prices on a specific scrape date"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            SELECT departure_date, flight_number, price, currency
-            FROM flights
-            WHERE departure_code = ? AND arrival_code = ? 
-                AND DATE(scraped_at) = ?
-            ORDER BY departure_date ASC, price ASC
-        ''', (departure_code, arrival_code, scraped_at_date))
-        
-        results = cursor.fetchall()
-        conn.close()
-        return results
 
-
-class FlightScraper:
-    """Scrapes flight prices from Air New Zealand (Demo/Mock implementation)"""
-    
+class RealFlightScraper:
     def __init__(self):
         self.scraped_at = datetime.now().isoformat()
-        self.session = requests.Session()
-        self.session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        })
-    
-    def generate_mock_flights(self, departure: str, arrival: str, 
-                            days_ahead: int) -> List[Dict]:
-        """
-        Generate mock flight data for demonstration
-        In production, this would scrape actual data from Air New Zealand API/website
-        """
+        
+    def scrape_real_prices(self, departure: str, arrival: str, date_str: str) -> List[Dict]:
         flights = []
-        departure_date = (datetime.now() + timedelta(days=days_ahead)).date()
+        url = f"https://www.airnewzealand.co.nz/flights/en-nz/{departure}-to-{arrival}?v=1&outboundDate={date_str}&searchType=oneway&adults=1"
         
-        # Generate 2-4 flights per day for each route
-        num_flights = random.randint(2, 4)
-        
-        for i in range(num_flights):
-            flight_number = f'NZ{random.randint(100, 999)}'
-            departure_hour = random.randint(6, 22)
-            departure_time = f'{departure_hour:02d}:{random.randint(0, 59):02d}'
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True, args=["--disable-blink-features=AutomationControlled"])
+            context = browser.new_context(
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+            )
+            page = context.new_page()
             
-            # Price varies based on route distance and demand
-            base_price = self._calculate_base_price(departure, arrival)
-            price = base_price + random.uniform(-100, 200)
-            
-            flights.append({
-                'flight_number': flight_number,
-                'departure_code': departure,
-                'arrival_code': arrival,
-                'departure_date': str(departure_date),
-                'departure_time': departure_time,
-                'arrival_time': f'{(departure_hour + random.randint(2, 15)) % 24:02d}:{random.randint(0, 59):02d}',
-                'duration': f'{random.randint(2, 16)}h {random.randint(0, 59):02d}m',
-                'price': round(max(price, 100), 2),
-                'currency': 'NZD',
-                'cabin_class': 'ECONOMY',
-                'scraped_at': self.scraped_at
-            })
-        
+            try:
+                page.goto(url, timeout=60000)
+                page.wait_for_selector(".flight-card-container, .pricing-grid, .flight-option", timeout=30000)
+                time.sleep(5)
+                
+                cards = page.query_selector_all(".flight-card-container, .flight-option")
+                for card in cards:
+                    try:
+                        f_num_el = card.query_selector(".flight-number, .flight-code")
+                        f_num = f_num_el.inner_text().strip() if f_num_el else f"NZ_联运_{departure}_{arrival}"
+                        
+                        price_el = card.query_selector(".price-amount, .amount, .formatted-price")
+                        if not price_el:
+                            continue
+                        price_raw = price_el.inner_text().replace("$", "").replace(",", "").strip()
+                        price = float(price_raw)
+                        
+                        dep_time_el = card.query_selector(".departure-time, .dep-time")
+                        dep_time = dep_time_el.inner_text().strip() if dep_time_el else None
+                        
+                        arr_time_el = card.query_selector(".arrival-time, .arr-time")
+                        arr_time = arr_time_el.inner_text().strip() if arr_time_el else None
+                        
+                        duration_el = card.query_selector(".duration, .flight-duration")
+                        duration = duration_el.inner_text().strip() if duration_el else None
+                        
+                        flights.append({
+                            'flight_number': f_num,
+                            'departure_code': departure,
+                            'arrival_code': arrival,
+                            'departure_date': date_str,
+                            'departure_time': dep_time,
+                            'arrival_time': arr_time,
+                            'duration': duration,
+                            'price': price,
+                            'currency': 'NZD',
+                            'cabin_class': 'ECONOMY',
+                            'scraped_at': self.scraped_at
+                        })
+                    except Exception:
+                        continue
+            except Exception as e:
+                logger.error(f"Failed to load {departure}->{arrival} on {date_str}: {e}")
+            finally:
+                browser.close()
+                
         return flights
-    
-    def _calculate_base_price(self, departure: str, arrival: str) -> float:
-        """Calculate base price based on route"""
-        # Mock pricing: domestic vs international
-        domestic_routes = {('AKL', 'WLG'), ('WLG', 'AKL'), ('AKL', 'SYD'), ('SYD', 'AKL'), 
-                          ('WLG', 'SYD'), ('SYD', 'WLG')}
-        
-        if (departure, arrival) in domestic_routes:
-            return 250.0  # Domestic base price
-        return 800.0  # International base price
-    
-    def scrape_all_routes(self) -> List[Dict]:
-        """Scrape flights for all routes and dates"""
-        all_flights = []
-        
-        logger.info(f"Starting scrape at {self.scraped_at}")
-        logger.info(f"Scraping {len(ROUTES)} routes for {SCRAPE_DAYS} days")
-        
-        for departure, arrival in ROUTES:
-            logger.info(f"Scraping route {departure} -> {arrival}")
-            
-            for days_ahead in range(SCRAPE_DAYS):
-                try:
-                    flights = self.generate_mock_flights(departure, arrival, days_ahead)
-                    all_flights.extend(flights)
-                except Exception as e:
-                    logger.error(f"Error scraping {departure}->{arrival} for day {days_ahead}: {e}")
-                    continue
-            
-            logger.info(f"Completed {departure} -> {arrival}")
-        
-        logger.info(f"Scraped total {len(all_flights)} flights")
-        return all_flights
-
 
 def main():
-    """Main execution function"""
-    try:
-        # Initialize database
-        db = FlightDatabase(DATABASE)
-        
-        # Scrape flights
-        scraper = FlightScraper()
-        flights = scraper.scrape_all_routes()
-        
-        # Store in database
-        inserted_count = 0
-        for flight in flights:
-            if db.insert_flight(flight):
-                inserted_count += 1
-        
-        logger.info(f"Successfully inserted {inserted_count} new flight records")
-        logger.info(f"Scrape completed at {datetime.now().isoformat()}")
-        
-        return 0
+    db = FlightDatabase(DATABASE)
+    scraper = RealFlightScraper()
+    inserted_count = 0
     
-    except Exception as e:
-        logger.error(f"Fatal error in scraper: {e}", exc_info=True)
-        return 1
-
+    for departure, arrival in ROUTES:
+        for days_ahead in range(1, SCRAPE_DAYS + 1):
+            target_date = (datetime.now() + timedelta(days=days_ahead)).date()
+            date_str = str(target_date)
+            
+            logger.info(f"Fetching real assets for {departure} -> {arrival} on {date_str}")
+            flights = scraper.scrape_real_prices(departure, arrival, date_str)
+            
+            for flight in flights:
+                if db.insert_flight(flight):
+                    inserted_count += 1
+            time.sleep(random.uniform(2, 5) if 'random' in globals() else 3)
+            
+    logger.info(f"Pipeline finished. Inserted {inserted_count} real data entries.")
+    return 0
 
 if __name__ == '__main__':
     exit(main())
