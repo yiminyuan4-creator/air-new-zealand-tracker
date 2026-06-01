@@ -9,6 +9,7 @@ from urllib.parse import urlencode
 
 from config import (
     BOOKING_URL,
+    CHROME_BINARY,
     CURRENCY,
     DEBUG_HTML,
     DAYS_AHEAD,
@@ -46,6 +47,8 @@ class Scraper:
         from selenium.webdriver.chrome.options import Options
 
         opts = Options()
+        if CHROME_BINARY:
+            opts.binary_location = CHROME_BINARY
         if HEADLESS:
             opts.add_argument('--headless=new')
         opts.page_load_strategy = 'eager'
