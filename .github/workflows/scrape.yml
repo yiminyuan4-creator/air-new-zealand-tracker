@@ -14,7 +14,7 @@ on:
       days:
         description: Future departure days to scrape
         required: false
-        default: '7'
+        default: '365'
 
 permissions:
   contents: write
@@ -45,9 +45,11 @@ jobs:
         run: python -m unittest discover -s tests -v
       
       - name: Run scraper
-        run: python scraper.py --days "${{ inputs.days || '7' }}"
+        run: python scraper.py --days "${{ inputs.days || '365' }}"
         env:
           CHROME_BINARY: ${{ steps.setup-chrome.outputs.chrome-path }}
+          REQUEST_DELAY_MIN: '1'
+          REQUEST_DELAY_MAX: '3'
       
       - name: Commit and push
         run: |
