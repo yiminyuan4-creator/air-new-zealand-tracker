@@ -1,6 +1,12 @@
 name: Daily Flight Scraper
 
 on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - 'flights.db'
+      - 'debug_*.html'
   schedule:
     - cron: '0 18 * * *'
   workflow_dispatch:
