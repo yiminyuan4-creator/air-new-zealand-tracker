@@ -1,128 +1,128 @@
 # Air New Zealand Flight Tracker
 
-一个用于实时爬取新西兰航空飞行数据的 Python 爬虫项目。
+A real-time flight data scraper for Air New Zealand flights from Auckland to major destinations.
 
-## 项目功能
+## Features
 
-- 🛫 **实时爬取航班数据** - 从奥克兰出发到以下城市的航班信息：
-  - 长沙 (Changsha, CSX)
-  - 悉尼 (Sydney, SYD)
-  - 惠灵顿 (Wellington, WLG)
-  - 纽约 (New York, NYC)
-  - 墨尔本 (Melbourne, MEL)
+- ✈️ **Real-time flight scraping** - Scrapes actual flight data from Auckland to:
+  - Changsha (CSX)
+  - Sydney (SYD)
+  - Wellington (WLG)
+  - New York (NYC)
+  - Melbourne (MEL)
 
-- 📊 **数据持久化** - 支持 CSV 和 JSON 格式保存
-- 📈 **数据分析** - 提供航班数据统计和分析
-- ⏰ **定时爬取** - 支持自动定时爬取任务
-- 🔄 **错误重试** - 自动重试机制确保数据完整性
+- 💾 **Data persistence** - Supports CSV and JSON formats
+- 📊 **Data analytics** - Provides flight statistics and analysis
+- ⏰ **Automated scheduling** - Supports automatic periodic scraping
+- 🔄 **Error handling** - Automatic retry mechanism for robust data collection
 
-## 项目结构
+## Project Structure
 
 ```
 air-new-zealand-tracker/
-├── config.py              # 项目配置
-├── flight_scraper.py      # 主爬虫程序
-├── scheduler.py           # 定时任务调度器
-├── data_analyzer.py       # 数据分析工具
-├── requirements.txt       # 项目依赖
-├── README.md             # 本文件
-├── data/                 # 爬取数据存储目录
-│   ├── flight_data.csv   # CSV 格式数据
-│   └── flight_data.json  # JSON 格式数据
-└── logs/                 # 日志目录
-    └── flight_scraper.log # 爬虫日志
+├── config.py              # Project configuration
+├── flight_scraper.py      # Main scraper program
+├── scheduler.py           # Scheduled task executor
+├── data_analyzer.py       # Data analysis tool
+├── requirements.txt       # Project dependencies
+├── README.md             # This file
+├── data/                 # Data storage directory
+│   ├── flight_data.csv   # CSV format data
+│   └── flight_data.json  # JSON format data
+└── logs/                 # Logs directory
+    └── flight_scraper.log # Scraper logs
 ```
 
-## 环境要求
+## Requirements
 
 - Python 3.8+
-- Google Chrome 浏览器（用于 Selenium）
-- ChromeDriver（与 Chrome 版本匹配）
+- Google Chrome browser (for Selenium)
+- ChromeDriver (matching your Chrome version)
 
-## 安装和使用
+## Installation and Usage
 
-### 1. 克隆项目
+### 1. Clone the repository
 
 ```bash
 git clone https://github.com/yiminyuan4-creator/air-new-zealand-tracker.git
 cd air-new-zealand-tracker
 ```
 
-### 2. 安装依赖
+### 2. Install dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 3. 下载 ChromeDriver
+### 3. Download ChromeDriver
 
-从 [ChromeDriver 官网](https://chromedriver.chromium.org/) 下载与你的 Chrome 版本匹配的驱动程序，放在项目目录中或添加到系统 PATH。
+Download ChromeDriver from [official site](https://chromedriver.chromium.org/) matching your Chrome version and place it in your project directory or system PATH.
 
-### 4. 运行爬虫
+### 4. Run the scraper
 
-#### 方式一：单次爬取
+#### Option 1: Single scrape
 
 ```bash
 python flight_scraper.py
 ```
 
-这将：
-- 爬取未来 7 天的所有路由航班数据
-- 将数据保存到 `data/flight_data.csv` 和 `data/flight_data.json`
-- 生成详细的日志文件
+This will:
+- Scrape flight data for the next 7 days across all routes
+- Save results to `data/flight_data.csv` and `data/flight_data.json`
+- Generate detailed logs
 
-#### 方式二：定时自动爬取
+#### Option 2: Scheduled automatic scraping
 
 ```bash
 python scheduler.py
 ```
 
-这将：
-- 立即执行一次爬取
-- 然后每 6 小时自动运行一次（可在 `config.py` 中修改 `SCRAPE_INTERVAL_HOURS`）
+This will:
+- Execute one scrape immediately
+- Then automatically run every 6 hours (configurable in `config.py`)
 
-### 5. 数据分析
+### 5. Analyze data
 
 ```bash
 python data_analyzer.py
 ```
 
-这将：
-- 显示航班数据统计摘要
-- 按路由统计航班数量
-- 计算票价统计信息
-- 生成详细的分析报告到 `data/flight_analysis_report.json`
+This will:
+- Display flight data summary
+- Show statistics by route
+- Calculate price statistics
+- Generate detailed analysis report to `data/flight_analysis_report.json`
 
-## 配置说明
+## Configuration
 
-在 `config.py` 中可以配置：
+Edit `config.py` to customize:
 
 ```python
-# 监控的路由
+# Routes to monitor
 ROUTES = [
     {"departure": "AKL", "arrival": "CSX", ...},
     # ...
 ]
 
-# 浏览器设置
-HEADLESS_BROWSER = True           # 是否使用无头浏览器
-BROWSER_TIMEOUT = 30              # 浏览器超时时间（秒）
-RETRY_ATTEMPTS = 3                # 失败重试次数
+# Browser settings
+HEADLESS_BROWSER = True           # Use headless browser
+BROWSER_TIMEOUT = 30              # Timeout in seconds
+RETRY_ATTEMPTS = 3                # Retry failed requests
 
-# 定时任务间隔（小时）
+# Scheduling interval (hours)
 SCRAPE_INTERVAL_HOURS = 6
 ```
 
-## 数据输出格式
+## Data Output Format
 
-### CSV 格式示例
+### CSV Format
 
 ```csv
 departure_code,arrival_code,departure_time,arrival_time,duration,airline,price,currency,stops,scraped_at,departure_name,arrival_name
-AKL,SYD,06:15,07:45,1h 30m,Air New Zealand,NZ$199.00,NZD,0,2026-06-01T10:30:00,...
+AKL,SYD,06:15,07:45,1h 30m,Air New Zealand,NZ$199.00,NZD,0,2026-06-01T10:30:00,Auckland,Sydney
 ```
 
-### JSON 格式示例
+### JSON Format
 
 ```json
 [
@@ -144,47 +144,47 @@ AKL,SYD,06:15,07:45,1h 30m,Air New Zealand,NZ$199.00,NZD,0,2026-06-01T10:30:00,.
 ]
 ```
 
-## 日志文件
+## Logs
 
-日志文件位置：`logs/flight_scraper.log`
+Log file location: `logs/flight_scraper.log`
 
-包含以下信息：
-- 爬虫启动/停止时间
-- 网页加载情况
-- 数据解析过程
-- 错误和异常信息
+Contains:
+- Scraper startup/shutdown times
+- Page loading status
+- Data parsing progress
+- Errors and exceptions
 
-## 常见问题
+## Troubleshooting
 
-### Q: 爬虫无法找到元素怎么办？
-A: 这通常是因为网站页面结构改变了。需要更新 CSS 选择器。可以：
-1. 打开浏览器开发者工具（F12）
-2. 检查相关元素的选择器
-3. 更新 `flight_scraper.py` 中的选择器
+### Q: Scraper cannot find elements?
+A: The website structure may have changed. Update CSS selectors in `flight_scraper.py`:
+1. Open browser developer tools (F12)
+2. Inspect relevant elements
+3. Update the selectors in the code
 
-### Q: 爬虫超时怎么办？
-A: 可以在 `config.py` 中增加 `BROWSER_TIMEOUT` 的值（单位为秒）
+### Q: Scraper timeout?
+A: Increase `BROWSER_TIMEOUT` in `config.py`
 
-### Q: 如何修改爬取的航班数量和日期？
-A: 修改 `flight_scraper.py` 中 `scrape_all_routes()` 方法的 `search_dates` 参数
+### Q: How to modify scrape frequency and dates?
+A: Edit the `search_dates` parameter in `scrape_all_routes()` method
 
-## 注意事项
+## Important Notes
 
-⚠️ **重要提示**：
-- 使用本爬虫请遵守目标网站的 `robots.txt` 和服务条款
-- 不要以过高的频率爬取数据，建议间隔 6 小时以上
-- 仅用于学习和研究目的
-- 请在获得网站所有者的同意下使用
+⚠️ **Disclaimer**:
+- Respect the website's `robots.txt` and terms of service
+- Do not scrape at excessive frequency; recommend 6+ hours between requests
+- Use only for learning and research purposes
+- Obtain website owner consent before scraping
 
-## 许可证
+## License
 
 MIT License
 
-## 联系方式
+## Contact
 
-如有问题或建议，请提交 Issue 或 Pull Request。
+For issues or suggestions, please submit an Issue or Pull Request.
 
 ---
 
-**更新日期**：2026-06-01  
-**版本**：1.0.0
+**Last Updated**: June 1, 2026  
+**Version**: 1.0.0
