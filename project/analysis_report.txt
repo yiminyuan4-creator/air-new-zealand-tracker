@@ -1,8 +1,0 @@
-========================================================================
-DATABASE TRACKING INFRASTRUCTURE STATISTICS
-========================================================================
-Total Records Maintained: 84703
-Unique Route Sectors: 20
-Active Booking Horizon: 2026-05-27 to 2027-05-26
-
-Target Sector Selection: AKL -> CSX on 2026-12-13
