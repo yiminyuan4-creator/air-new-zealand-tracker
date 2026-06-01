@@ -34,7 +34,7 @@ streamlit run app.py
 ## Database
 
 ```
-flights table:
+flights.db:
 - dept: Departure airport
 - arrv: Arrival airport
 - date: Flight date (YYYY-MM-DD)
