@@ -2,9 +2,16 @@ name: Daily Flight Scraper
 
 on:
   schedule:
-    - cron: '0 6 * * *'
     - cron: '0 18 * * *'
   workflow_dispatch:
+    inputs:
+      days:
+        description: Future departure days to scrape
+        required: false
+        default: '7'
+
+permissions:
+  contents: write
 
 jobs:
   scrape:
@@ -15,25 +22,28 @@ jobs:
         uses: actions/checkout@v4
       
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.9'
+          python-version: '3.11'
+
+      - name: Set up Chrome
+        uses: browser-actions/setup-chrome@v2
+        with:
+          install-chromedriver: true
       
       - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y chromium-browser chromium-chromedriver
-          pip install -r requirements.txt
+        run: pip install -r requirements.txt
+
+      - name: Run tests
+        run: python -m unittest discover -s tests -v
       
       - name: Run scraper
-        run: python scraper.py
-        continue-on-error: true
+        run: python scraper.py --days "${{ inputs.days || '7' }}"
       
       - name: Commit and push
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          git add flights.db
+          git add -f flights.db
           git diff --cached --quiet || git commit -m "chore: Update flight data - $(date +'%Y-%m-%d %H:%M:%S UTC')"
           git push
-        continue-on-error: true

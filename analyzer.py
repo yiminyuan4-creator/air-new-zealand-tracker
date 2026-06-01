@@ -6,7 +6,7 @@ class Analyzer:
     def flight_history(dept, arrv, date, time):
         """Get price history for a flight"""
         rows = get_flight_history(dept, arrv, date, time)
-        return [{'ts': r['ts'], 'price': r['price']} for r in rows]
+        return [{'scrape_ts': r['scrape_ts'], 'price': r['price']} for r in rows]
     
     @staticmethod
     def route_prices(dept, arrv, date):
@@ -17,7 +17,7 @@ class Analyzer:
             t = r['time']
             if t not in data:
                 data[t] = []
-            data[t].append({'ts': r['ts'], 'price': r['price']})
+            data[t].append({'scrape_ts': r['scrape_ts'], 'price': r['price']})
         return data
     
     @staticmethod
