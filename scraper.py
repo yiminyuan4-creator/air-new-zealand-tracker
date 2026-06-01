@@ -26,7 +26,14 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
 log = logging.getLogger(__name__)
 
 
-PRICE_RE = re.compile(r'(?:NZD\s*\$?\s*|\$\s*)([0-9][0-9,]*(?:\.\d{2})?)', re.I)
+PRICE_RE = re.compile(
+    r'(?:'
+    r'(NZD|USD|AUD)\s*\$?\s*([0-9][0-9,]*(?:\.\d{2})?)'
+    r'|\$\s*([0-9][0-9,]*(?:\.\d{2})?)'
+    r'|([0-9][0-9,]*(?:\.\d{2})?)\s*(美元|新西兰元|纽元|纽币|澳元)'
+    r')',
+    re.I,
+)
 TIME_RE = re.compile(r'\b([01]?\d|2[0-3]):([0-5]\d)\s*([AP]M)?\b', re.I)
 FLIGHT_RE = re.compile(r'\b(?:NZ|Air\s*New\s*Zealand)\s?(\d{1,4})\b', re.I)
 STOP_RE = re.compile(r'\b(\d+)\s+stop', re.I)
@@ -162,17 +169,20 @@ class Scraper:
             flight_count = self._text(option, '[data-automation="leg-option-flight-count"]')
             flight_number = option.get('data-automation-flight-numbers')
 
-            prices = []
+            fares = []
             for cost in option.select('[data-automation^="leg-option-cost-"]'):
-                price = self._extract_price(cost.get_text(' ', strip=True))
+                price, currency = self._extract_price_currency(cost.get_text(' ', strip=True))
                 if price is not None:
-                    prices.append(price)
-            if not prices:
-                prices = [p for p in [self._extract_price(option.get_text(' ', strip=True))] if p is not None]
+                    fares.append((price, currency))
+            if not fares:
+                price, currency = self._extract_price_currency(option.get_text(' ', strip=True))
+                if price is not None:
+                    fares.append((price, currency))
 
             departure_time = self._normalise_time(departure)
-            if not departure_time or not prices:
+            if not departure_time or not fares:
                 continue
+            price, currency = min(fares, key=lambda item: item[0])
 
             flights.append({
                 'dept': dept,
@@ -181,8 +191,8 @@ class Scraper:
                 'time': departure_time,
                 'arrival_time': self._normalise_time(arrival),
                 'flight_number': self._normalise_flight_number(flight_number),
-                'price': min(prices),
-                'currency': CURRENCY,
+                'price': price,
+                'currency': currency,
                 'duration': self._normalise_duration(duration),
                 'stops': self._stops_from_flight_count(flight_count),
                 'airline': 'Air NZ',
@@ -215,7 +225,7 @@ class Scraper:
     def _parse_card(self, text, dept, arrv, departure_date, source_url, scrape_ts):
         if not text or len(text) < 8:
             return None
-        price = self._extract_price(text)
+        price, currency = self._extract_price_currency(text)
         times = self._extract_times(text)
         if price is None or not times:
             return None
@@ -233,7 +243,7 @@ class Scraper:
             'arrival_time': arrival_time,
             'flight_number': self._normalise_flight_number(f"NZ{flight_match.group(1)}" if flight_match else None),
             'price': price,
-            'currency': CURRENCY,
+            'currency': currency,
             'duration': self._normalise_duration(self._extract_duration(text)),
             'stops': int(stops_match.group(1)) if stops_match else (0 if 'non-stop' in text.lower() or 'direct' in text.lower() else None),
             'airline': 'Air NZ',
@@ -242,12 +252,32 @@ class Scraper:
         }
 
     def _extract_price(self, text):
-        matches = PRICE_RE.findall(text)
+        price, _currency = self._extract_price_currency(text)
+        return price
+
+    def _extract_price_currency(self, text):
+        matches = PRICE_RE.findall(text or '')
         if not matches:
-            return None
-        prices = [float(m.replace(',', '')) for m in matches]
-        plausible = [p for p in prices if 20 <= p <= 20000]
-        return min(plausible) if plausible else None
+            return None, CURRENCY
+        fares = []
+        for prefix, coded_amount, symbol_amount, suffixed_amount, suffix in matches:
+            amount = coded_amount or symbol_amount or suffixed_amount
+            price = float(amount.replace(',', ''))
+            if not 20 <= price <= 20000:
+                continue
+            currency = self._normalise_currency(prefix or suffix)
+            fares.append((price, currency))
+        return min(fares, key=lambda item: item[0]) if fares else (None, CURRENCY)
+
+    def _normalise_currency(self, value):
+        text = (value or '').upper()
+        if text in {'USD', '美元'}:
+            return 'USD'
+        if text in {'AUD', '澳元'}:
+            return 'AUD'
+        if text in {'NZD', '新西兰元', '纽元', '纽币'}:
+            return 'NZD'
+        return CURRENCY
 
     def _extract_times(self, text):
         times = []
