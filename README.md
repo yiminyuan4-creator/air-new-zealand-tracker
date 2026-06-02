@@ -4,7 +4,7 @@ A small Streamlit dashboard that tracks Air New Zealand fares from Auckland to s
 
 ## Demo
 
-- Dashboard: deploy `app.py` on Streamlit Community Cloud
+- Dashboard: deploy `src/app.py` on Streamlit Community Cloud
 - Source code: this repository
 
 ## What it does
@@ -19,8 +19,8 @@ A small Streamlit dashboard that tracks Air New Zealand fares from Auckland to s
 
 ```bash
 pip install -r requirements.txt
-python scraper.py --days 30
-streamlit run app.py
+python src/scraper.py --days 30
+streamlit run src/app.py
 ```
 
 ## Automation

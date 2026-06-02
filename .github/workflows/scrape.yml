@@ -45,7 +45,7 @@ jobs:
         run: python -m unittest discover -s tests -v
       
       - name: Run scraper
-        run: python scraper.py --days "${{ inputs.days || '30' }}"
+        run: python src/scraper.py --days "${{ inputs.days || '30' }}"
         env:
           CHROME_BINARY: ${{ steps.setup-chrome.outputs.chrome-path }}
           REQUEST_DELAY_MIN: '1'

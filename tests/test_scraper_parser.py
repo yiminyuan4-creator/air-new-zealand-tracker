@@ -2,7 +2,9 @@ import sys
 from pathlib import Path
 import unittest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / ".deps"))
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / ".deps"))
+sys.path.insert(0, str(ROOT / "src"))
 
 from scraper import BlockedError, Scraper, selected_dates, selected_routes
 
