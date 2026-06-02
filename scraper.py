@@ -36,7 +36,9 @@ PRICE_RE = re.compile(
 )
 TIME_RE = re.compile(r'\b([01]?\d|2[0-3]):([0-5]\d)\s*([AP]M)?\b', re.I)
 FLIGHT_RE = re.compile(r'\b(?:NZ|Air\s*New\s*Zealand)\s?(\d{1,4})\b', re.I)
+AIRCRAFT_RE = re.compile(r'\b(?:A\d{3}(?:neo)?|7(?:37|77|87)[-\w]*)\b', re.I)
 STOP_RE = re.compile(r'\b(\d+)\s+stop', re.I)
+FLIGHT_COUNT_RE = re.compile(r'\b(\d+)\s+flights?\b', re.I)
 BLOCK_RE = re.compile(r'captcha|access denied|too many requests|blocked|robot|unusual traffic', re.I)
 
 
@@ -139,6 +141,9 @@ class Scraper:
         flights = self._parse_airnz_leg_options(soup, dept, arrv, departure_date, source_url, scrape_ts)
         if flights:
             return flights
+        flights = self._parse_airnz_flight_rows(soup, dept, arrv, departure_date, source_url, scrape_ts)
+        if flights:
+            return flights
 
         cards = self._candidate_cards(soup)
         flights = []
@@ -200,6 +205,66 @@ class Scraper:
                 'scrape_ts': scrape_ts,
             })
         return flights
+
+    def _parse_airnz_flight_rows(self, soup, dept, arrv, departure_date, source_url, scrape_ts):
+        flights = []
+        for row in soup.select('[class*="testid__FlightRow"]'):
+            text = row.get_text(' ', strip=True)
+            departure = self._text(row, '[class*="testid__DepartureTime"]')
+            arrival = self._text(row, '[class*="testid__ArrivalTime"]')
+            departure_time = self._normalise_time(departure)
+            arrival_time = self._normalise_time(arrival)
+            if not departure_time:
+                continue
+
+            fares = []
+            for price_card in row.select('[class*="testid__PriceCardRadio"]'):
+                price, currency = self._extract_price_currency(price_card.get_text(' ', strip=True))
+                if price is not None:
+                    fares.append((price, currency))
+            if not fares:
+                price, currency = self._extract_price_currency(text)
+                if price is not None:
+                    fares.append((price, currency))
+            if not fares:
+                continue
+
+            price, currency = min(fares, key=lambda item: item[0])
+            flight_count = FLIGHT_COUNT_RE.search(text)
+            aircraft = AIRCRAFT_RE.search(text)
+            flights.append({
+                'dept': dept,
+                'arrv': arrv,
+                'date': departure_date,
+                'time': departure_time,
+                'arrival_time': arrival_time,
+                'flight_number': aircraft.group(0).upper() if aircraft else None,
+                'price': price,
+                'currency': currency,
+                'duration': self._normalise_duration(self._extract_duration(text)),
+                'stops': max(int(flight_count.group(1)) - 1, 0) if flight_count else None,
+                'airline': 'Air NZ',
+                'source_url': source_url,
+                'scrape_ts': scrape_ts,
+            })
+        return self._dedupe_flights(flights)
+
+    def _dedupe_flights(self, flights):
+        unique = []
+        seen = set()
+        for flight in flights:
+            key = (
+                flight.get('date'),
+                flight.get('time'),
+                flight.get('arrival_time'),
+                flight.get('flight_number'),
+                flight.get('price'),
+            )
+            if key in seen:
+                continue
+            seen.add(key)
+            unique.append(flight)
+        return unique
 
     def _text(self, element, selector):
         found = element.select_one(selector)
@@ -318,7 +383,7 @@ class Scraper:
         return re.sub(r'(\d)\s+([hm])\b', r'\1\2', value)
 
     def _stops_from_flight_count(self, text):
-        match = re.search(r'\b(\d+)\s+flights?\b', text or '', re.I)
+        match = FLIGHT_COUNT_RE.search(text or '')
         return max(int(match.group(1)) - 1, 0) if match else None
 
     def _sleep(self, backoff=1):

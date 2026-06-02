@@ -56,6 +56,38 @@ class ParserTest(unittest.TestCase):
         self.assertEqual(rows[0]["price"], 157.0)
         self.assertEqual(rows[0]["stops"], 1)
 
+    def test_parse_airnz_flight_row_dom(self):
+        from bs4 import BeautifulSoup
+
+        html = """
+        <div class="testid__FlightRow">
+          <div class="testid__DepartureTime">Departs 7:20pm AKL</div>
+          <div class="testid__ArrivalTime">Arrives 9:30pm MEL</div>
+          <div>A321neo 1 Flight 4h 10m</div>
+          <div class="testid__PriceCardRadioDesktop-1-5-js">seat $325</div>
+          <div class="testid__PriceCardRadioDesktop-1-5-wk">the works $365</div>
+          <div class="testid__PriceCardRadioDesktop-1-5-wf">works flexi $425</div>
+        </div>
+        """
+
+        rows = Scraper.__new__(Scraper)._parse_airnz_flight_rows(
+            BeautifulSoup(html, "html.parser"),
+            "AKL",
+            "MEL",
+            "2026-12-13",
+            "https://example.test",
+            "2026-06-02T18:00:00",
+        )
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["time"], "19:20")
+        self.assertEqual(rows[0]["arrival_time"], "21:30")
+        self.assertEqual(rows[0]["flight_number"], "A321NEO")
+        self.assertEqual(rows[0]["price"], 325.0)
+        self.assertEqual(rows[0]["currency"], "NZD")
+        self.assertEqual(rows[0]["duration"], "4h 10m")
+        self.assertEqual(rows[0]["stops"], 0)
+
     def test_parse_card_does_not_treat_flight_number_as_price(self):
         text = "Air New Zealand NZ401 departs 09:00 arrives 10:05"
 
