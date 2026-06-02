@@ -6,7 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / ".deps"))
 sys.path.insert(0, str(ROOT / "src"))
 
-from scraper import BlockedError, Scraper, selected_dates, selected_routes
+from scraper import BlockedError, ResultsNotReadyError, Scraper, selected_dates, selected_routes
 
 
 class ParserTest(unittest.TestCase):
@@ -117,6 +117,38 @@ class ParserTest(unittest.TestCase):
 
         with self.assertRaises(BlockedError):
             scraper._wait_for_results()
+
+    def test_wait_for_results_rejects_empty_airnz_shell(self):
+        class Body:
+            text = "Search for Flights Sign in Need help? Live chat with our team 24/7 Copyright 2026"
+
+        class Driver:
+            page_source = "<html><body>Search for Flights</body></html>"
+
+            def find_element(self, *_args):
+                return Body()
+
+        scraper = Scraper.__new__(Scraper)
+        scraper.driver = Driver()
+
+        import scraper as scraper_module
+
+        old_timeout = scraper_module.TIMEOUT
+        scraper_module.TIMEOUT = 0.01
+        try:
+            with self.assertRaises(ResultsNotReadyError):
+                scraper._wait_for_results()
+        finally:
+            scraper_module.TIMEOUT = old_timeout
+
+    def test_has_loaded_flight_results_requires_flight_dom(self):
+        class Driver:
+            page_source = '<div class="testid__FlightRow">Departs 7:00am Arrives 8:45am seat $312</div>'
+
+        scraper = Scraper.__new__(Scraper)
+        scraper.driver = Driver()
+
+        self.assertTrue(scraper._has_loaded_flight_results("Departs 7:00am Arrives 8:45am seat $312"))
 
     def test_selected_routes_parses_cli_routes(self):
         self.assertEqual(

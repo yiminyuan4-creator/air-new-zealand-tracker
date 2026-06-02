@@ -46,6 +46,10 @@ class BlockedError(RuntimeError):
     pass
 
 
+class ResultsNotReadyError(RuntimeError):
+    pass
+
+
 class Scraper:
     def __init__(self):
         init_db()
@@ -73,6 +77,11 @@ class Scraper:
         driver.set_page_load_timeout(TIMEOUT)
         return driver
 
+    def _reset_browser(self):
+        log.info("Resetting browser session before retry")
+        self.close()
+        self.driver = self._setup_browser()
+
     def _build_url(self, dept, arrv, departure_date):
         dt = datetime.strptime(departure_date, '%Y-%m-%d')
         params = {
@@ -92,6 +101,7 @@ class Scraper:
         return f'{BOOKING_URL}?{urlencode(params)}'
 
     def search(self, dept, arrv, date):
+        from selenium.common.exceptions import WebDriverException
         from selenium.webdriver.common.by import By
         from selenium.webdriver.support import expected_conditions as EC
         from selenium.webdriver.support.ui import WebDriverWait
@@ -107,11 +117,26 @@ class Scraper:
                 self._wait_for_results()
                 scrape_ts = datetime.now().isoformat(timespec='seconds')
                 flights = self._parse(dept, arrv, date, source_url, scrape_ts)
-                save_many(flights)
+                if not flights and not self._is_no_flights_page():
+                    raise ResultsNotReadyError('Air NZ did not return parseable flight rows.')
+                if flights:
+                    save_many(flights)
                 log.info(f"Found {len(flights)} flights")
                 return flights
             except BlockedError:
                 raise
+            except ResultsNotReadyError as e:
+                log.warning("Air NZ results were not ready for %s->%s %s: %s", dept, arrv, date, e)
+                if attempt == RETRIES - 1:
+                    return []
+                self._reset_browser()
+                self._sleep(backoff=attempt + 1)
+            except WebDriverException as e:
+                log.warning("Browser did not finish loading %s->%s %s: %s", dept, arrv, date, e.__class__.__name__)
+                if attempt == RETRIES - 1:
+                    return []
+                self._reset_browser()
+                self._sleep(backoff=attempt + 1)
             except Exception as e:
                 log.exception(f"Error searching {dept}->{arrv} {date}: {e}")
                 if attempt == RETRIES - 1:
@@ -122,17 +147,38 @@ class Scraper:
     def _wait_for_results(self):
         end = time.time() + TIMEOUT
         while time.time() < end:
-            text = self.driver.find_element("tag name", "body").text
+            try:
+                text = self.driver.find_element("tag name", "body").text
+            except Exception:
+                time.sleep(1)
+                continue
             lowered = text.lower()
             if BLOCK_RE.search(lowered):
                 raise BlockedError('Air NZ returned a bot/limit page; stopping to protect the IP.')
             if 'session expired' in lowered:
                 raise RuntimeError('Air NZ session expired before results loaded')
-            if PRICE_RE.search(text) and TIME_RE.search(text):
+            if self._has_loaded_flight_results(text):
                 return
-            if 'no flights' in lowered or 'unable to find' in lowered:
+            if self._is_no_flights_text(lowered):
                 return
             time.sleep(1)
+        raise ResultsNotReadyError('Timed out waiting for Air NZ flight results.')
+
+    def _has_loaded_flight_results(self, text):
+        if not (PRICE_RE.search(text or '') and TIME_RE.search(text or '')):
+            return False
+        source = self.driver.page_source
+        if 'testid__FlightRow' in source or 'data-automation="leg-option"' in source:
+            return True
+        lowered = (text or '').lower()
+        return 'departs' in lowered and 'arrives' in lowered
+
+    def _is_no_flights_text(self, lowered_text):
+        return 'no flights' in lowered_text or 'unable to find' in lowered_text
+
+    def _is_no_flights_page(self):
+        text = self.driver.find_element("tag name", "body").text.lower()
+        return self._is_no_flights_text(text)
 
     def _parse(self, dept, arrv, departure_date, source_url, scrape_ts):
         from bs4 import BeautifulSoup
