@@ -48,8 +48,8 @@ jobs:
         run: python src/scraper.py --days "${{ inputs.days || '30' }}"
         env:
           CHROME_BINARY: ${{ steps.setup-chrome.outputs.chrome-path }}
-          REQUEST_DELAY_MIN: '1'
-          REQUEST_DELAY_MAX: '3'
+          REQUEST_DELAY_MIN: '5'
+          REQUEST_DELAY_MAX: '10'
       
       - name: Commit and push
         run: |
