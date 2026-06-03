@@ -19,6 +19,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: daily-flight-scraper
+  cancel-in-progress: true
+
 jobs:
   scrape:
     runs-on: ubuntu-latest
