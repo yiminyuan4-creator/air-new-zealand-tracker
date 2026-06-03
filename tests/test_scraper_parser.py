@@ -1,6 +1,7 @@
 import sys
 from pathlib import Path
 import unittest
+from datetime import date
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / ".deps"))
@@ -179,6 +180,17 @@ class ParserTest(unittest.TestCase):
 
         self.assertEqual(total, 1)
         self.assertEqual(calls, [("AKL", "CSX", "2026-12-13")])
+
+    def test_date_window_starts_on_third_future_day(self):
+        dates = Scraper.__new__(Scraper)._date_window(
+            days=30,
+            start_days_ahead=3,
+            today=date(2026, 6, 3),
+        )
+
+        self.assertEqual(len(dates), 30)
+        self.assertEqual(dates[0], "2026-06-06")
+        self.assertEqual(dates[-1], "2026-07-05")
 
 
 if __name__ == "__main__":

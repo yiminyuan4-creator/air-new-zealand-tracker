@@ -13,6 +13,7 @@ ROUTES = [
 BOOKING_URL = "https://flightbookings.airnewzealand.co.nz/vbook/actions/ext-search"
 DB_PATH = os.getenv("DB_PATH", "flights.db")
 DAYS_AHEAD = int(os.getenv("DAYS_AHEAD", "30"))
+START_DAYS_AHEAD = int(os.getenv("START_DAYS_AHEAD", "3"))
 TIMEOUT = int(os.getenv("TIMEOUT", "45"))
 RETRIES = int(os.getenv("RETRIES", "3"))
 HEADLESS = os.getenv("HEADLESS", "true").lower() != "false"

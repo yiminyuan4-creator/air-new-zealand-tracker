@@ -2,7 +2,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from config import ROUTES
+from config import ROUTES, START_DAYS_AHEAD
 from db import (
     get_all,
     get_dates,
@@ -62,6 +62,15 @@ def money(value, currency):
     return f"{currency} {float(value):,.0f}"
 
 
+def default_departure_index(dates):
+    today = pd.Timestamp.now(tz="Pacific/Auckland").date()
+    target = (today + pd.Timedelta(days=START_DAYS_AHEAD)).strftime("%Y-%m-%d")
+    for index, value in enumerate(dates):
+        if value >= target:
+            return index
+    return max(len(dates) - 1, 0)
+
+
 st.set_page_config(page_title="Air NZ Flight Price Tracker", layout="wide")
 
 st.markdown(
@@ -111,7 +120,17 @@ dates = get_dates(dept, arrv)
 if not dates:
     st.warning("No departure dates are available for this route.")
     st.stop()
-departure_date = st.sidebar.selectbox("Departure date", dates)
+date_values = [pd.to_datetime(value).date() for value in dates]
+departure_value = st.sidebar.date_input(
+    "Departure date",
+    value=date_values[default_departure_index(dates)],
+    min_value=min(date_values),
+    max_value=max(date_values),
+)
+departure_date = departure_value.strftime("%Y-%m-%d")
+if departure_date not in dates:
+    st.warning("No saved prices are available for this departure date.")
+    st.stop()
 
 scrape_times = get_scrape_times(dept, arrv, departure_date)
 if not scrape_times:

@@ -18,6 +18,7 @@ from config import (
     REQUEST_DELAY_MIN,
     RETRIES,
     ROUTES,
+    START_DAYS_AHEAD,
     TIMEOUT,
 )
 from db import init_db, save_many
@@ -443,12 +444,16 @@ class Scraper:
             fh.write(self.driver.page_source)
         log.info("Saved debug HTML to %s", filename)
 
-    def run(self, days=7, routes=None, dates=None):
-        routes = routes or ROUTES
-        dates = dates or [
-            (date_cls.today() + timedelta(days=i)).strftime('%Y-%m-%d')
-            for i in range(1, days + 1)
+    def _date_window(self, days, start_days_ahead=START_DAYS_AHEAD, today=None):
+        today = today or date_cls.today()
+        return [
+            (today + timedelta(days=i)).strftime('%Y-%m-%d')
+            for i in range(start_days_ahead, start_days_ahead + days)
         ]
+
+    def run(self, days=7, routes=None, dates=None, start_days_ahead=START_DAYS_AHEAD):
+        routes = routes or ROUTES
+        dates = dates or self._date_window(days, start_days_ahead=start_days_ahead)
         total = 0
         jobs = [
             (r['dept'], r['arrv'], departure_date)
@@ -470,6 +475,12 @@ class Scraper:
 def parse_args():
     parser = argparse.ArgumentParser(description='Scrape Air NZ flight prices into SQLite.')
     parser.add_argument('--days', type=int, default=DAYS_AHEAD, help='Number of future departure days to scrape.')
+    parser.add_argument(
+        '--start-days-ahead',
+        type=int,
+        default=START_DAYS_AHEAD,
+        help='First departure day offset from today. Default skips today and tomorrow.',
+    )
     parser.add_argument(
         '--date',
         action='append',
@@ -515,7 +526,12 @@ if __name__ == "__main__":
     args = parse_args()
     s = Scraper()
     try:
-        total = s.run(days=args.days, routes=selected_routes(args.route), dates=selected_dates(args.date))
+        total = s.run(
+            days=args.days,
+            routes=selected_routes(args.route),
+            dates=selected_dates(args.date),
+            start_days_ahead=args.start_days_ahead,
+        )
         if total == 0:
             raise SystemExit("No flight prices were saved; Air NZ markup or search availability may have changed.")
     finally:
