@@ -216,6 +216,22 @@ class ParserTest(unittest.TestCase):
         self.assertEqual(dates[0], "2026-06-06")
         self.assertEqual(dates[-1], "2026-07-05")
 
+    def test_jobs_limits_and_rotates_search_window(self):
+        routes = [{"dept": "AKL", "arrv": code} for code in ["CSX", "WLG", "MEL", "SYD", "NYC"]]
+        dates = Scraper.__new__(Scraper)._date_window(
+            days=30,
+            start_days_ahead=3,
+            today=date(2026, 6, 5),
+        )
+        scraper = Scraper.__new__(Scraper)
+
+        first = scraper._jobs(routes, dates, max_searches=50, today=date(2026, 6, 5))
+        second = scraper._jobs(routes, dates, max_searches=50, today=date(2026, 6, 6))
+
+        self.assertEqual(len(first), 50)
+        self.assertEqual(len(second), 50)
+        self.assertNotEqual(first, second)
+
 
 if __name__ == "__main__":
     unittest.main()

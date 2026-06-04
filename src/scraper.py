@@ -14,6 +14,7 @@ from config import (
     DEBUG_HTML,
     DAYS_AHEAD,
     HEADLESS,
+    MAX_SEARCHES_PER_RUN,
     REQUEST_DELAY_MAX,
     REQUEST_DELAY_MIN,
     RETRIES,
@@ -451,15 +452,32 @@ class Scraper:
             for i in range(start_days_ahead, start_days_ahead + days)
         ]
 
-    def run(self, days=7, routes=None, dates=None, start_days_ahead=START_DAYS_AHEAD):
-        routes = routes or ROUTES
-        dates = dates or self._date_window(days, start_days_ahead=start_days_ahead)
-        total = 0
+    def _jobs(self, routes, dates, max_searches=None, today=None):
         jobs = [
             (r['dept'], r['arrv'], departure_date)
             for departure_date in dates
             for r in routes
         ]
+        if not max_searches or max_searches >= len(jobs):
+            return jobs
+        today = today or date_cls.today()
+        start = (today.toordinal() * max_searches) % len(jobs)
+        rotated = jobs[start:] + jobs[:start]
+        return rotated[:max_searches]
+
+    def run(
+        self,
+        days=7,
+        routes=None,
+        dates=None,
+        start_days_ahead=START_DAYS_AHEAD,
+        max_searches=MAX_SEARCHES_PER_RUN,
+    ):
+        routes = routes or ROUTES
+        dates = dates or self._date_window(days, start_days_ahead=start_days_ahead)
+        total = 0
+        jobs = self._jobs(routes, dates, max_searches=max_searches)
+        log.info("Running %s Air NZ searches from a %s-search window", len(jobs), len(routes) * len(dates))
         for index, (dept, arrv, departure_date) in enumerate(jobs, start=1):
             try:
                 total += len(self.search(dept, arrv, departure_date))
@@ -484,6 +502,12 @@ def parse_args():
         type=int,
         default=START_DAYS_AHEAD,
         help='First departure day offset from today. Default skips today and tomorrow.',
+    )
+    parser.add_argument(
+        '--max-searches',
+        type=int,
+        default=MAX_SEARCHES_PER_RUN,
+        help='Maximum route/date searches per run. Use 0 for the full window.',
     )
     parser.add_argument(
         '--date',
@@ -535,6 +559,7 @@ if __name__ == "__main__":
             routes=selected_routes(args.route),
             dates=selected_dates(args.date),
             start_days_ahead=args.start_days_ahead,
+            max_searches=args.max_searches,
         )
         if total == 0:
             raise SystemExit("No flight prices were saved; Air NZ markup or search availability may have changed.")
