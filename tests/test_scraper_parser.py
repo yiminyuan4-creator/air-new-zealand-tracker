@@ -181,6 +181,30 @@ class ParserTest(unittest.TestCase):
         self.assertEqual(total, 1)
         self.assertEqual(calls, [("AKL", "CSX", "2026-12-13")])
 
+    def test_run_stops_cleanly_after_block_with_partial_data(self):
+        scraper = Scraper.__new__(Scraper)
+        calls = []
+
+        def fake_search(dept, arrv, departure_date):
+            calls.append((dept, arrv, departure_date))
+            if len(calls) == 1:
+                return [{"price": 1}]
+            raise BlockedError("blocked")
+
+        scraper.search = fake_search
+        scraper._sleep = lambda: None
+
+        total = scraper.run(
+            routes=[{"dept": "AKL", "arrv": "WLG"}],
+            dates=["2026-06-07", "2026-06-08"],
+        )
+
+        self.assertEqual(total, 1)
+        self.assertEqual(
+            calls,
+            [("AKL", "WLG", "2026-06-07"), ("AKL", "WLG", "2026-06-08")],
+        )
+
     def test_date_window_starts_on_third_future_day(self):
         dates = Scraper.__new__(Scraper)._date_window(
             days=30,

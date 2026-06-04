@@ -461,7 +461,11 @@ class Scraper:
             for r in routes
         ]
         for index, (dept, arrv, departure_date) in enumerate(jobs, start=1):
-            total += len(self.search(dept, arrv, departure_date))
+            try:
+                total += len(self.search(dept, arrv, departure_date))
+            except BlockedError as exc:
+                log.warning("Stopping early to protect the IP: %s", exc)
+                break
             if index < len(jobs):
                 self._sleep()
         log.info("Saved %s flight price records", total)
