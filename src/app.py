@@ -45,9 +45,6 @@ def load_data():
     return df
 
 
-FLIGHT_COLUMNS = ["time", "arrival_time", "flight_number", "duration"]
-
-
 def default_date(dates):
     target = (
         pd.Timestamp.now(tz="Pacific/Auckland").date()
@@ -79,11 +76,10 @@ def latest_rows(df):
     return df[df["scrape_ts"] == df.groupby("date")["scrape_ts"].transform("max")].copy()
 
 
-def flight_history_counts(df):
+def date_capture_counts(df):
     return (
-        df.assign(**{col: df[col].fillna("") for col in FLIGHT_COLUMNS})
-        .groupby(["date"] + FLIGHT_COLUMNS)
-        .size()
+        df.groupby("date")["scrape_ts"]
+        .nunique()
         .reset_index(name="captures")
     )
 
@@ -131,7 +127,7 @@ st.caption(f"{city(ORIGIN)} to {city(arrv)} · latest capture {ts(route['scrape_
 
 if chart == "Buy timing":
     dates = sorted(route["date"].unique())
-    counts = flight_history_counts(route)
+    counts = date_capture_counts(route)
     best_count = counts.sort_values(["captures", "date"], ascending=[False, True]).iloc[0]
     selected_date = date_input(
         dates,
@@ -139,33 +135,14 @@ if chart == "Buy timing":
         key=f"buy_date_{arrv}",
     )
     date_rows = route[route["date"] == selected_date].copy()
-    current = latest_rows(date_rows).sort_values(["time", "price"]).reset_index(drop=True)
-    current_counts = flight_history_counts(date_rows).drop(columns=["date"])
-    current = current.assign(**{col: current[col].fillna("") for col in FLIGHT_COLUMNS})
-    current = current.merge(current_counts, on=FLIGHT_COLUMNS, how="left")
-    current["captures"] = current["captures"].fillna(1).astype(int)
-    current["flight_option"] = current["itinerary"] + " · " + current["captures"].astype(str) + " captures"
-    default_flight_index = int(current["captures"].idxmax())
-    selected_flight = st.sidebar.selectbox(
-        "Flight",
-        current["flight_option"].tolist(),
-        index=default_flight_index,
-        key=f"buy_flight_{arrv}_{selected_date}",
-    )
-    flight = current[current["flight_option"] == selected_flight].iloc[0]
-
-    history = date_rows[
-        (date_rows["time"] == flight["time"])
-        & (date_rows["arrival_time"].fillna("") == str(flight.get("arrival_time") or ""))
-        & (date_rows["flight_number"].fillna("") == str(flight.get("flight_number") or ""))
-        & (date_rows["duration"].fillna("") == str(flight.get("duration") or ""))
-    ].sort_values("scrape_dt")
+    idx = date_rows.groupby("scrape_ts")["price"].idxmin()
+    history = date_rows.loc[idx].sort_values("scrape_dt")
     history["days_before_departure"] = (
         pd.to_datetime(selected_date) - history["scrape_dt"]
     ).dt.total_seconds().div(86400).round(1)
 
     if len(history) < 2:
-        st.info("This flight has only one saved capture so far. The line will appear after at least two daily captures.")
+        st.info("This route/date has only one saved capture so far. The line will appear after at least two captures.")
     line_chart(
         history,
         "days_before_departure",
@@ -175,10 +152,23 @@ if chart == "Buy timing":
         f"Price ({currency})",
     )
     st.dataframe(
-        history[["scrape_ts", "days_before_departure", "price", "currency"]].rename(
+        history[[
+            "scrape_ts",
+            "days_before_departure",
+            "time",
+            "arrival_time",
+            "flight_number",
+            "duration",
+            "price",
+            "currency",
+        ]].rename(
             columns={
                 "scrape_ts": "Captured at",
                 "days_before_departure": "Days before departure",
+                "time": "Departure",
+                "arrival_time": "Arrival",
+                "flight_number": "Flight",
+                "duration": "Duration",
                 "price": "Price",
                 "currency": "Currency",
             }
