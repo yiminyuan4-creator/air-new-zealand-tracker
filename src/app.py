@@ -86,13 +86,17 @@ def date_capture_counts(df):
 
 def line_chart(df, x, y, title, x_title, y_title, hover=None):
     fig = go.Figure()
+    hovertemplate = "%{x}<br>Price %{y:.0f}<extra></extra>"
+    if hover:
+        details = "".join(f"<br>{label}: %{{customdata[{i}]}}" for i, label in enumerate(hover))
+        hovertemplate = f"{x_title}: %{{x}}<br>Price: %{{y:.0f}}{details}<extra></extra>"
     fig.add_trace(
         go.Scatter(
             x=df[x],
             y=df[y],
             mode="lines+markers",
             customdata=df[hover] if hover else None,
-            hovertemplate="%{x}<br>Price %{y:.0f}<extra></extra>",
+            hovertemplate=hovertemplate,
         )
     )
     fig.update_layout(margin=dict(l=10, r=10, t=20, b=10), xaxis_title=x_title, yaxis_title=y_title)
@@ -140,6 +144,14 @@ if chart == "Buy timing":
     history["days_before_departure"] = (
         pd.to_datetime(selected_date) - history["scrape_dt"]
     ).dt.total_seconds().div(86400).round(1)
+    history["Captured"] = history["scrape_dt"].dt.strftime("%Y-%m-%d %H:%M")
+    history = history.sort_values("days_before_departure")
+    table = history.sort_values("scrape_dt", ascending=False)
+    latest = table.iloc[0]
+    st.caption(
+        f"Latest saved price for {selected_date}: {currency} {latest['price']:.0f} "
+        f"captured {ts(latest['scrape_ts'])}"
+    )
 
     if len(history) < 2:
         st.info("This route/date has only one saved capture so far. The line will appear after at least two captures.")
@@ -150,9 +162,10 @@ if chart == "Buy timing":
         "Price by booking lead time",
         "Days before departure",
         f"Price ({currency})",
+        ["Captured", "itinerary"],
     )
     st.dataframe(
-        history[[
+        table[[
             "scrape_ts",
             "days_before_departure",
             "time",
