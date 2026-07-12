@@ -53,7 +53,6 @@ jobs:
       
       - name: Run scraper
         timeout-minutes: 180
-        continue-on-error: true
         run: python src/scraper.py --days "${{ inputs.days || '30' }}" --start-days-ahead "${{ inputs.start_days_ahead || '3' }}" --max-searches "${{ inputs.max_searches || '50' }}"
         env:
           CHROME_BINARY: ${{ steps.setup-chrome.outputs.chrome-path }}
