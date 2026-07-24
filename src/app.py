@@ -2,22 +2,12 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from config import ORIGIN, START_DAYS_AHEAD
+from config import CITY_NAMES, ORIGIN, START_DAYS_AHEAD
 from db import get_all, init_db
 
 
-NAMES = {
-    "AKL": "Auckland",
-    "CSX": "Changsha",
-    "WLG": "Wellington",
-    "MEL": "Melbourne",
-    "SYD": "Sydney",
-    "NYC": "New York",
-}
-
-
 def city(code):
-    return f"{NAMES.get(code, code)} ({code})"
+    return f"{CITY_NAMES.get(code, code)} ({code})"
 
 
 def ts(value):

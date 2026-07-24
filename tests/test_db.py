@@ -23,7 +23,7 @@ class DatabaseTest(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def test_save_and_query_route_and_flight_history(self):
+    def test_save_many_and_get_all(self):
         self.db.init_db()
         rows = [
             {
@@ -49,11 +49,12 @@ class DatabaseTest(unittest.TestCase):
         ]
 
         self.assertEqual(self.db.save_many(rows), 2)
-        self.assertEqual(len(self.db.get_route_data("AKL", "WLG", "2026-07-01")), 2)
-        history = self.db.get_flight_history("AKL", "WLG", "2026-07-01", "09:00")
-        self.assertEqual([r["price"] for r in history], [99.0, 119.0])
+        saved = self.db.get_all()
+        self.assertEqual(len(saved), 2)
+        self.assertEqual([r["price"] for r in saved], [119.0, 99.0])
+        self.assertEqual(saved[0]["currency"], "NZD")
 
-    def test_flight_history_can_filter_same_departure_time_itineraries(self):
+    def test_save_many_preserves_same_departure_time_options(self):
         self.db.init_db()
         rows = [
             {
@@ -80,19 +81,9 @@ class DatabaseTest(unittest.TestCase):
             },
         ]
 
-        self.db.save_many(rows)
-
-        history = self.db.get_flight_history(
-            "AKL",
-            "CSX",
-            "2026-12-13",
-            "23:55",
-            "13:00",
-            "NZ0289",
-            "18h 5m",
-        )
-        self.assertEqual(len(history), 1)
-        self.assertEqual(history[0]["arrival_time"], "13:00")
+        self.assertEqual(self.db.save_many(rows), 2)
+        arrivals = sorted(row["arrival_time"] for row in self.db.get_all())
+        self.assertEqual(arrivals, ["13:00", "16:00"])
 
     def test_init_db_migrates_old_schema_with_ts(self):
         conn = sqlite3.connect(os.environ["DB_PATH"])
@@ -118,7 +109,7 @@ class DatabaseTest(unittest.TestCase):
 
         self.db.init_db()
 
-        rows = self.db.get_route_data("AKL", "SYD", "2026-07-01")
+        rows = self.db.get_all()
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["scrape_ts"], "2026-06-02T18:00:00")
 

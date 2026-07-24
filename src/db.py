@@ -6,6 +6,30 @@ from config import DB_PATH
 
 DB = DB_PATH
 
+INSERT_SQL = '''
+    INSERT INTO flights (
+        dept, arrv, date, time, arrival_time, flight_number,
+        price, currency, duration, stops, airline, source_url, scrape_ts
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+'''
+
+INSERT_COLUMNS = (
+    'dept',
+    'arrv',
+    'date',
+    'time',
+    'arrival_time',
+    'flight_number',
+    'price',
+    'currency',
+    'duration',
+    'stops',
+    'airline',
+    'source_url',
+    'scrape_ts',
+)
+
 
 def _connect():
     conn = sqlite3.connect(DB)
@@ -70,117 +94,41 @@ def save(
     source_url=None,
     scrape_ts=None,
 ):
-    scrape_ts = scrape_ts or datetime.now().isoformat(timespec='seconds')
-    conn = _connect()
-    try:
-        conn.execute(
-            '''
-            INSERT INTO flights (
-                dept, arrv, date, time, arrival_time, flight_number,
-                price, currency, duration, stops, airline, source_url, scrape_ts
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''',
-            (
-                dept, arrv, date, time, arrival_time, flight_number,
-                price, currency, duration, stops, airline, source_url, scrape_ts
-            )
-        )
-        conn.commit()
-    finally:
-        conn.close()
+    return save_many([{
+        'dept': dept,
+        'arrv': arrv,
+        'date': date,
+        'time': time,
+        'arrival_time': arrival_time,
+        'flight_number': flight_number,
+        'price': price,
+        'currency': currency,
+        'duration': duration,
+        'stops': stops,
+        'airline': airline,
+        'source_url': source_url,
+        'scrape_ts': scrape_ts,
+    }])
 
 
 def save_many(flights: Iterable[dict]):
-    count = 0
+    rows = []
     for flight in flights:
-        save(**flight)
-        count += 1
-    return count
+        values = dict(flight)
+        values.setdefault('currency', 'NZD')
+        values.setdefault('airline', 'Air NZ')
+        values['scrape_ts'] = values.get('scrape_ts') or datetime.now().isoformat(timespec='seconds')
+        rows.append(tuple(values.get(column) for column in INSERT_COLUMNS))
+    if not rows:
+        return 0
 
-
-def get_flight_history(dept, arrv, date, time, arrival_time=None, flight_number=None, duration=None):
     conn = _connect()
-    params = [dept, arrv, date, time]
-    filters = ['dept=?', 'arrv=?', 'date=?', 'time=?']
-    for column, value in (
-        ('arrival_time', arrival_time),
-        ('flight_number', flight_number),
-        ('duration', duration),
-    ):
-        if value:
-            filters.append(f'{column}=?')
-            params.append(value)
-    rows = conn.execute(
-        f'''
-        SELECT price, currency, scrape_ts, flight_number, arrival_time, duration, stops
-        FROM flights
-        WHERE {' AND '.join(filters)}
-        ORDER BY scrape_ts
-        ''',
-        params
-    ).fetchall()
-    conn.close()
-    return rows
-
-
-def get_route_data(dept, arrv, date, scrape_ts=None):
-    conn = _connect()
-    params = [dept, arrv, date]
-    where = 'dept=? AND arrv=? AND date=?'
-    if scrape_ts:
-        where += ' AND scrape_ts=?'
-        params.append(scrape_ts)
-    rows = conn.execute(
-        f'''
-        SELECT time, arrival_time, flight_number, price, currency, scrape_ts, duration, stops
-        FROM flights
-        WHERE {where}
-        ORDER BY scrape_ts, time, price
-        ''',
-        params
-    ).fetchall()
-    conn.close()
-    return rows
-
-
-def get_routes():
-    conn = _connect()
-    rows = conn.execute('SELECT DISTINCT dept, arrv FROM flights ORDER BY dept, arrv').fetchall()
-    conn.close()
-    return rows
-
-
-def get_dates(dept=None, arrv=None):
-    conn = _connect()
-    if dept and arrv:
-        rows = conn.execute(
-            'SELECT DISTINCT date FROM flights WHERE dept=? AND arrv=? ORDER BY date',
-            (dept, arrv)
-        ).fetchall()
-    else:
-        rows = conn.execute('SELECT DISTINCT date FROM flights ORDER BY date').fetchall()
-    conn.close()
-    return [r['date'] for r in rows]
-
-
-def get_scrape_times(dept=None, arrv=None, date=None):
-    conn = _connect()
-    params = []
-    where = []
-    if dept and arrv:
-        where.extend(['dept=?', 'arrv=?'])
-        params.extend([dept, arrv])
-    if date:
-        where.append('date=?')
-        params.append(date)
-    clause = f"WHERE {' AND '.join(where)}" if where else ''
-    rows = conn.execute(
-        f'SELECT DISTINCT scrape_ts FROM flights {clause} ORDER BY scrape_ts DESC',
-        params
-    ).fetchall()
-    conn.close()
-    return [r['scrape_ts'] for r in rows]
+    try:
+        conn.executemany(INSERT_SQL, rows)
+        conn.commit()
+    finally:
+        conn.close()
+    return len(rows)
 
 
 def get_all():

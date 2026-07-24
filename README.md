@@ -12,8 +12,8 @@ A small Streamlit dashboard that tracks Air New Zealand fares from Auckland to s
 - Scrapes future flight prices for Auckland to Changsha, Wellington, Melbourne, Sydney, and New York
 - Saves every result with a scrape timestamp in `flights.db`
 - Shows two interactive charts:
-  - prices for different departure times on the same route and date
-  - price history for the same selected flight across scrape times
+  - lowest saved price by booking lead time for one route and departure date
+  - latest lowest saved price by departure date for one route
 
 ## Run locally
 
@@ -25,4 +25,5 @@ streamlit run src/app.py
 
 ## Automation
 
-GitHub Actions runs the scraper daily and commits the updated SQLite database.
+GitHub Actions runs the scraper daily, checks the parser tests, and commits the updated SQLite database.
+The default run checks 50 route/date searches per day from a rolling 30-day window to keep the scraper fast and conservative.

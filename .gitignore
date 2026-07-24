@@ -3,6 +3,7 @@ __pycache__/
 *.db
 *.log
 debug_*.html
+run*_logs/
 .deps/
 .vscode/
 .idea/

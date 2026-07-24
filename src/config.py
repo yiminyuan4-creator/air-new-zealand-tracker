@@ -2,12 +2,18 @@ import os
 
 ORIGIN = os.getenv("ORIGIN", "AKL")
 
+CITY_NAMES = {
+    "AKL": "Auckland",
+    "CSX": "Changsha",
+    "WLG": "Wellington",
+    "MEL": "Melbourne",
+    "SYD": "Sydney",
+    "NYC": "New York",
+}
+
 ROUTES = [
-    {"dept": ORIGIN, "arrv": "CSX", "name": "Changsha"},
-    {"dept": ORIGIN, "arrv": "WLG", "name": "Wellington"},
-    {"dept": ORIGIN, "arrv": "MEL", "name": "Melbourne"},
-    {"dept": ORIGIN, "arrv": "SYD", "name": "Sydney"},
-    {"dept": ORIGIN, "arrv": "NYC", "name": "New York"},
+    {"dept": ORIGIN, "arrv": code, "name": CITY_NAMES[code]}
+    for code in ("CSX", "WLG", "MEL", "SYD", "NYC")
 ]
 
 BOOKING_URL = "https://flightbookings.airnewzealand.co.nz/vbook/actions/ext-search"

@@ -467,7 +467,7 @@ class Scraper:
 
     def run(
         self,
-        days=7,
+        days=DAYS_AHEAD,
         routes=None,
         dates=None,
         start_days_ahead=START_DAYS_AHEAD,
